@@ -212,7 +212,7 @@ body:has(#endCard:not([hidden])) #touch,body:has(#endCard:not([hidden])) #gbtns,
       <div id="v_home" class="view">
         <label class="field"><span>Your name</span><input id="nameIn" maxlength="16" autocomplete="nickname" placeholder="e.g. Tunde"></label>
         <div class="modes"><button id="btnCreate" class="mode" disabled>Create room</button><button id="btnJoin" class="mode">Join room</button></div>
-        <div class="minor"><button id="btnPractice" class="linkish" disabled>Practise with bots</button></div>
+        <div class="minor"><button id="btnPractice" class="linkish" disabled>Practise with bots</button> <button id="btnRange" class="linkish" disabled>Guns test range</button></div>
         <p id="homeMsg" class="practice" role="status"></p>
       </div>
       <div id="v_join" class="view" hidden>
@@ -3540,6 +3540,7 @@ const LOBBY = (() => {
     GAME.setScoreHook(roundOver);
     $('#btnCreate').addEventListener('click', () => createRoom(false));
     $('#btnPractice').addEventListener('click', () => createRoom(true));
+    $('#btnRange').addEventListener('click', () => { saveName(); SHOOTER.start(); });
     $('#btnJoin').addEventListener('click', () => { saveName(); $('#joinMsg').textContent = ''; homeMsg(''); show('join'); });
     $('#joinGo').addEventListener('click', joinRoom);
     $('#codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });
@@ -3593,9 +3594,11 @@ function frameLoop(now){
     camera.position.set(P.x, P.y + EYE, P.z);
     camera.rotation.set(P.pitch, P.yaw, 0, 'YXZ');
   }
+  if (window.SHOOTER) SHOOTER.tick(dt);
   scene.userData.sky.position.copy(camera.position);
   if (window.__noRender){ requestAnimationFrame(frameLoop); return; }   // tests: run the game logic without drawing
   renderer.render(scene, camera);
+  if (window.SHOOTER) SHOOTER.render();
   if (now - lastLabel > 250){ lastLabel = now; updateLabel(); }
   drawMap();
   fpsAcc += dt; fpsN++; if (fpsAcc > 1){ window.__fps = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0; adaptQuality(window.__fps); }
@@ -3639,7 +3642,7 @@ addEventListener('unhandledrejection', e => { if (!window.__ready) showError(e.r
     setProg(1, 'Ready');
     $('#bar').classList.add('done');
     $('#load').textContent = ''; $('#loadBox').hidden = true;
-    $('#btnCreate').disabled = $('#btnPractice').disabled = !GAME.S.ready; if (LOBBY.inRoom()) LOBBY.renderRoom();
+    $('#btnCreate').disabled = $('#btnPractice').disabled = $('#btnRange').disabled = !GAME.S.ready; if (LOBBY.inRoom()) LOBBY.renderRoom();
     window.__ready = true;
     MUSIC.preload();   // fetch the lobby song only once the game itself is loaded
     requestAnimationFrame(frameLoop);
@@ -3696,4 +3699,6 @@ window.__P = P; window.__teleport = teleport; window.__sim = (k, secs) => { for 
 window.__info = () => JSON.stringify(renderer.info.render) + ' cols ' + COLS.length;
 window.__dbg = { near, local, topAt, groundAt, COLS, blockedAt, inFootprint }; window.__start = () => { started = true; $('#start').hidden = true; };
 </script>
+<script src="js/rules.js"></script>
+<script src="js/shooter.js"></script>
 </body></html>
