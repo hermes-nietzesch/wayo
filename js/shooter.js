@@ -96,13 +96,18 @@ const SHOOTER = (() => {
     ARMS.root = root; ARMS.name = name; ARMS.id = null; ARMS.b = {};
     root.traverse(o => { if (o.isBone) ARMS.b[norm(o.name)] = o; });
     // the rifle idle gives a natural hold: note how each hand sits against the gun, then put the same hold on every gun
+    const rest = {}; root.updateMatrixWorld(true);
+    for (const sd of ['Right', 'Left']){ const h = ARMS.b[sd + 'Hand'], at = h.getWorldPosition(new THREE.Vector3()), f = ARMS.b[sd + 'ForeArm'].getWorldPosition(new THREE.Vector3()); rest[sd] = h.worldToLocal(at.clone().add(at.clone().sub(f).setLength(0.028))); }
     const clips = GAME.S.rifle[name], mx = new THREE.AnimationMixer(root); mx.clipAction(clips.Idle).play(); mx.update(0);
     for (const t of clips.Grip.tracks){ const bone = root.getObjectByName(t.name.slice(0, t.name.lastIndexOf('.'))); if (bone) bone.quaternion.fromArray(t.values); }
     const saved = [rig.position.clone(), rig.rotation.clone()]; rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0); root.position.set(0, 0, 0); rig.updateMatrixWorld(true);
     const B = ARMS.b, wp = o => o.getWorldPosition(new THREE.Vector3()), wq = o => o.getWorldQuaternion(new THREE.Quaternion());
     const rh = wp(B.RightHand), lh = wp(B.LeftHand), z = rh.clone().sub(lh).normalize(), x = new THREE.Vector3(0, 1, 0).cross(z).normalize(), y = z.clone().cross(x);
     const gun = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z)), inv = gun.clone().invert(), Q = ARMS.q;
-    const palm = sd => wp(B[sd + 'HandMiddle1']).lerp(wp(B[sd + 'Hand']), 0.25).add(new THREE.Vector3(0, 0, 0));
+    const palm = sd => {   // heroes rigged with few or no finger bones: the palm lies down the hand's own line, as it was in the T pose
+      const h = wp(B[sd + 'Hand']), f = B[sd + 'HandMiddle1'] || B[sd + 'HandIndex1'];
+      return f ? wp(f).lerp(h, 0.25) : B[sd + 'Hand'].localToWorld(rest[sd].clone());
+    };
     for (const sd of ['Right', 'Left']){
       const hand = B[sd + 'Hand'], fore = B[sd + 'ForeArm'], up = B[sd + 'Arm'];
       Q[sd] = { hand:inv.clone().multiply(wq(hand)), wrist:wp(hand).sub(palm(sd)).applyQuaternion(inv), foreToHand:wq(fore).invert().multiply(wq(hand)), upQ:inv.clone().multiply(wq(up)), lf:wp(fore).distanceTo(wp(hand)), lu:wp(up).distanceTo(wp(fore)) };
@@ -446,8 +451,13 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     { id:'kaftan', name:'Alhaji', team:'traders', h:1.78, arms:'kaftan_arms' },
     { id:'stud_f', name:'Chioma', team:'traders', h:1.68, arms:'stud_f_arms' },
     { id:'stud_m', name:'Kunle', team:'traders', h:1.78, arms:'stud_m_arms' },
-    { id:'trader_man', name:'Emeka', team:'traders', bot:true },
-    { id:'trader_woman', name:'Iya Bose', team:'traders', bot:true },
+    { id:'chief', name:'Chief', team:'traders', h:1.78, arms:'chief_arms' },
+    { id:'trader_m2', name:'Emeka', team:'traders', h:1.76, arms:'trader_m2_arms' },
+    { id:'trader_f2', name:'Iya Bose', team:'traders', h:1.68, arms:'trader_f2_arms' },
+    { id:'h_aba', name:'Aba Maid', team:'heroes', h:1.8, arms:'h_aba_arms', armS:0.78 },
+    { id:'h_one', name:'One Chance', team:'heroes', h:1.82, arms:'h_one_arms', armS:0.85 },
+    { id:'h_second', name:'Second Hand', team:'heroes', h:1.8, arms:'h_second_arms', armS:0.75 },
+    { id:'h_stretch', name:'Stretch Mark', team:'heroes', h:1.78, arms:'h_stretch_arms', armS:0.9 },
   ];
   const PICK_KEY = 'kasala-pick', MAX_KINDS = GFX.low ? 5 : 10;
   const byId = id => ROSTER.find(c => c.id === id), inTeam = t => ROSTER.filter(c => c.team === t), pickable = t => inTeam(t).filter(c => !c.bot), shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
