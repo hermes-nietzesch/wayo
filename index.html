@@ -273,7 +273,7 @@ body:has(#endCard:not([hidden])) #touch,body:has(#endCard:not([hidden])) #gbtns,
       <details class="credits"><summary>Credits</summary>
         <p>Street layout © OpenStreetMap contributors (ODbL). Textures, sky and many props from Poly Haven (CC0). Brands on signs are invented.</p>
         <p>Characters made for Kasala with Tripo AI; rigging and animations by Adobe Mixamo.</p>
-        <p>Lobby music: “Who Be Who”, an original song made for Wayo.</p>
+        <p>Theme music: “Epic Action Cinematic Trailer” by BombinSound, from Pixabay.</p>
         <p>Gun models from the Free CC0 Guns &amp; Explosives Pack by 3DModelsCC0.</p>
         <p>Gunshot recordings from The Free Firearm Sound Library (CC0) by Ben Jaszczak, Brian Nelson, Kevin Heras and Matthew Nanney.</p>
         <p>3D models from Sketchfab, used under Creative Commons Attribution 4.0, resized and optimised for this game:</p>
@@ -1764,11 +1764,11 @@ const MUSIC = (() => {
   function schedule(){
     while (next < A.currentTime + 0.25){ play(step, next); step++; next += STEP; }
   }
-  // the game's own song ("Who Be Who"); the drum loop above is the fallback if the file can't be fetched
+  // the Kasala theme; the drum loop above is the fallback if the file can't be fetched
   let song = null, songFailed = false;
   function getSong(){
     if (song || songFailed) return song;
-    song = new Audio('audio/who_be_who.mp3'); song.loop = true; song.volume = 0; song.preload = 'auto';
+    song = new Audio('audio/kasala_theme.mp3'); song.loop = true; song.volume = 0; song.preload = 'auto';
     song.addEventListener('error', () => { songFailed = true; song = null; if (playing){ playing = false; start(); } });
     return song;
   }
