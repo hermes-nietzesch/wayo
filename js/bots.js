@@ -138,6 +138,7 @@
     if (t) {
       if (t !== prev) { b.reactAt = W.now + rng(W.rand, b.diff.react) * (Math.hypot(t.x - b.x, t.z - b.z) < 5 ? 0.6 : 1); b.trackT = 0; b.burst = 0; }
       b.target = t; b.seenAt = W.now; b.lastSeen = [t.x, t.z]; b.state = 'fight';
+      if (b.team !== null && W.intel) W.intel[b.team] = { x:t.x, z:t.z, t:W.now };   // tell the team where the enemy is
       if (b.hp < 35 && !b.runTo && W.rand() < b.diff.retreat) { const c = coverSpot(b, W); if (c) { b.runTo = W.now + 3; routeTo(b, c[0], c[1], W); b.state = 'retreat'; } }
     } else if (b.state === 'fight') {
       b.target = null; b.state = 'chase'; if (b.lastSeen) routeTo(b, b.lastSeen[0], b.lastSeen[1], W); b.chaseUntil = W.now + 6;
@@ -146,7 +147,9 @@
     }
     if (b.runTo && W.now > b.runTo) { b.runTo = null; if (b.state === 'retreat') b.state = t ? 'fight' : 'roam'; }
     if (b.state === 'roam') {
-      if (b.heard && W.now - b.heard.t < 6) { routeTo(b, b.heard.x, b.heard.z, W); b.heard = null; b.state = 'chase'; b.chaseUntil = W.now + 8; }
+      const call = b.team !== null && W.intel && W.intel[b.team];
+      if (call && W.now - call.t < 6 && Math.hypot(call.x - b.x, call.z - b.z) < 70) { routeTo(b, call.x + (W.rand() - 0.5) * 10, call.z + (W.rand() - 0.5) * 10, W); b.state = 'chase'; b.chaseUntil = W.now + 7; }
+      else if (b.heard && W.now - b.heard.t < 6) { routeTo(b, b.heard.x, b.heard.z, W); b.heard = null; b.state = 'chase'; b.chaseUntil = W.now + 8; }
       else if (!b.route.length && W.now >= b.holdAt) {
         // real players go looking for a fight: mostly head towards someone, sometimes just patrol
         const foes = W.fighters.filter(f => f !== b && f.alive && (b.team === null || f.team !== b.team));
@@ -235,10 +238,11 @@
   }
   // bots react to gunfire they can hear
   function hearShot(bots, x, z, shooter, W) {
-    for (const b of bots) { if (b === shooter || !b.alive || b.state !== 'roam') continue; const d = Math.hypot(b.x - x, b.z - z); if (d < 34 && W.rand() < 0.5) b.heard = { x, z, t:W.now }; }
+    for (const b of bots) { if (b === shooter || !b.alive || b.state !== 'roam' || (b.team !== null && b.team === shooter.team)) continue; const d = Math.hypot(b.x - x, b.z - z); if (d < 34 && W.rand() < 0.5) b.heard = { x, z, t:W.now }; }
   }
   function respawn(b, spot, W) {
     const fresh = R.newFighter({ id:b.id, weapon:b.weapon, team:b.team });
+    b.think = W.rand() * 0.3; b.holdAt = 0; b.pauseAt = 0; b.lastHitBy = null;
     Object.assign(b, { ammo:fresh.ammo, hp:b.maxHp, alive:true, reloadAt:0, nextFire:0, bloom:0, x:spot[0], z:spot[1], y:W.groundAt(spot[0], spot[1], 2), state:'roam', route:[], target:null, runTo:null, lastSeen:null, burst:0, heard:null, lastX:spot[0], lastZ:spot[1], vx:0, vz:0, speed:0, back:false });
   }
   return { DIFF, makeNav, newBot, step, hearShot, respawn, sees, RADIUS };

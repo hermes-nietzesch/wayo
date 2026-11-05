@@ -7,7 +7,7 @@ const SHOOTER = (() => {
   const R = window.WAYO_RULES, W = R.WEAPONS, BOTS = window.WAYO_BOTS;
   const el = s => document.querySelector(s);
   const S = { active:false, now:0, me:null, targets:[], trigger:false, pressed:false, ads:false, adsT:0, paused:false,
-    pitchDebt:0, recoverDebt:0, vKick:0, vRoll:0, swing:0, bob:0, flashT:0, hitT:0, stats:null, last:'pistol', mode:'range', diff:'medium', bots:[], W:null, deadT:0, hurtT:0, vx:0, vz:0, stepPhase:0, stepSide:1, sprintT:0, land:0, wasGround:true, assists:0, stance:0, eyeDrop:0, crouchAt:0, crouchHeld:false, runWas:false, ladders:[], climb:null, boltAt:0, baseSens:1 };
+    pitchDebt:0, recoverDebt:0, vKick:0, vRoll:0, swing:0, bob:0, flashT:0, hitT:0, stats:null, last:'pistol', mode:'range', diff:'medium', bots:[], W:null, deadT:0, hurtT:0, vx:0, vz:0, stepPhase:0, stepSide:1, sprintT:0, land:0, wasGround:true, assists:0, fight:false, team:false, round:null, score:[0, 0], spec:null, ended:false, deadAge:0, stance:0, eyeDrop:0, crouchAt:0, crouchHeld:false, runWas:false, ladders:[], climb:null, boltAt:0, baseSens:1 };
 
   /* ---------------- first-person gun, drawn after the world so it never pokes through walls */
   const vmScene = new THREE.Scene(), vmCam = new THREE.PerspectiveCamera(46, 1, 0.01, 10), rig = new THREE.Group();
@@ -140,12 +140,15 @@ body.sh-on.sh-touch #shFeed{top:calc(env(safe-area-inset-top,0px) + 58px);right:
 #shDead{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(60,0,0,.45);text-align:center}#shDead b{display:block;font:400 34px/1 var(--display);color:var(--accent);margin-bottom:8px}
 #shScope{position:absolute;inset:0;background:radial-gradient(circle at center,transparent 0 33vh,#000 33.4vh)}#shScope:before,#shScope:after{content:"";position:absolute;background:rgba(0,0,0,.85)}#shScope:before{left:50%;top:calc(50% - 33vh);bottom:calc(50% - 33vh);width:1px}#shScope:after{top:50%;left:calc(50% - 33vh);right:calc(50% - 33vh);height:1px}
 #shElim{position:absolute;left:50%;top:32%;transform:translateX(-50%);font:400 24px/1 var(--display);color:#fff;text-shadow:0 2px 6px #000;opacity:0;transition:opacity .25s;white-space:nowrap}#shElim b{color:var(--accent);font-weight:400}
+#shBanner{position:absolute;left:50%;top:24%;transform:translateX(-50%);text-align:center;text-shadow:0 2px 8px #000;white-space:nowrap}#shBanner b{display:block;font:400 42px/1 var(--display)}#shBanner.win b{color:#5fd27d}#shBanner.lose b{color:var(--accent)}#shBanner span{font-size:15px}
+#shSpec{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 74px);transform:translateX(-50%);display:flex;gap:10px;align-items:center;background:rgba(8,8,11,.7);padding:7px 12px;border-radius:8px;pointer-events:auto}#shSpec button{background:none;border:1.5px solid var(--line);color:#fff;border-radius:6px;padding:6px 12px;font:700 13px/1 var(--body)}
+#shEnd{position:absolute;inset:0;background:rgba(5,5,8,.88);display:flex;pointer-events:auto;z-index:3;overflow:auto}#shEnd>div{width:min(680px,92vw);padding:10px 14px;margin:auto}#shEndB>section{display:grid;grid-template-columns:1fr 1fr;gap:18px}#shEnd h2{font:400 clamp(26px,9vh,44px)/1 var(--display);margin:0 0 4px;text-align:center}#shEnd h2.win{color:#5fd27d}#shEnd h2.lose{color:var(--accent)}#shEnd p{text-align:center;margin:0 0 12px;color:var(--muted)}#shEnd table{width:100%;border-collapse:collapse;font-size:13px}#shEnd td,#shEnd th{padding:4px 8px;text-align:right}#shEnd td:first-child,#shEnd th:first-child{text-align:left}#shEnd tr.me td{color:#fff;font-weight:800}#shEnd tr.sep td{padding-top:10px;color:var(--accent);font-weight:800}#shEnd .row{display:flex;gap:10px;justify-content:center;margin-top:14px}#shEnd button{background:rgba(8,8,11,.75);border:1.5px solid var(--line);color:#fff;border-radius:7px;padding:11px 18px;font:700 14px/1 var(--body);cursor:pointer}#shEnd button.go{background:var(--red);border-color:var(--red)}
 #shHint{position:absolute;left:50%;top:62%;transform:translateX(-50%);background:rgba(8,8,11,.6);padding:6px 12px;border-radius:6px;font-size:13px}
 body.sh-on #streetName,body.sh-on #coords{display:none}`;
     document.head.appendChild(css);
     const d = document.createElement('div'); d.id = 'shHud'; d.hidden = true;
     d.innerHTML = `<div id="shX"><i class="u"></i><i class="d"></i><i class="l"></i><i class="r"></i></div><div id="shHit"></div><div id="shFloat"></div>
-<div id="shScope" hidden></div><div id="shElim"></div><div id="shHint" hidden></div><div id="shHurt"></div><div id="shDir"><i></i></div><div id="shFeed"></div><div id="shHp" hidden><span id="shHpN">100</span><div><i id="shHpBar"></i></div></div><div id="shDead" hidden><div><b>You don fall</b><span id="shDeadBy"></span></div></div><div id="shStats"></div><div id="shReload" hidden><i></i></div><div id="shAmmo"><i id="shStance" hidden></i><b id="shMag"></b><span id="shName"></span></div><div id="shSlots"></div>
+<div id="shScope" hidden></div><div id="shBanner" hidden><b></b><span></span></div><div id="shSpec" hidden><span>Watching <b id="shSpecName"></b></span><button id="shSpecNext">Next</button></div><div id="shEnd" hidden><div><h2 id="shEndT"></h2><p id="shEndS"></p><div id="shEndB"></div><div class="row"><button class="go" id="shAgain">Play again</button><button id="shEndMenu">Back to menu</button></div></div></div><div id="shElim"></div><div id="shHint" hidden></div><div id="shHurt"></div><div id="shDir"><i></i></div><div id="shFeed"></div><div id="shHp" hidden><span id="shHpN">100</span><div><i id="shHpBar"></i></div></div><div id="shDead" hidden><div><b>You don fall</b><span id="shDeadBy"></span></div></div><div id="shStats"></div><div id="shReload" hidden><i></i></div><div id="shAmmo"><i id="shStance" hidden></i><b id="shMag"></b><span id="shName"></span></div><div id="shSlots"></div>
 ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFireL" aria-label="Fire">FIRE</button><button id="shAim" aria-pressed="false">AIM</button><button id="shRel">RELOAD</button><button id="shCrouch" aria-pressed="false">CROUCH</button></div><button id="shExit">Exit</button>' : ''}
 <div id="shPause" hidden><div><h2>Paused</h2><button class="go" id="shResume">Keep shooting</button><button id="shQuit">Back to menu</button></div></div>`;
     document.body.appendChild(d);
@@ -153,6 +156,9 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     for (const id of R.ORDER){ const b = document.createElement('button'); b.dataset.w = id; b.innerHTML = `${TOUCH ? '' : `<kbd>${W[id].slot}</kbd>`}${W[id].name}`; b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); swap(id); }); sl.appendChild(b); }
     el('#shResume').addEventListener('click', () => { setPaused(false); canvas.requestPointerLock?.()?.catch?.(() => {}); });
     el('#shQuit').addEventListener('click', stop);
+    el('#shSpecNext').addEventListener('click', () => { if (S.spec) S.spec.i++; });
+    el('#shEndMenu').addEventListener('click', stop);
+    el('#shAgain').addEventListener('click', () => { const o = { mode:S.mode, diff:S.diff }; stop(); start(o); });
     if (TOUCH){
       for (const id of ['#shFire', '#shFireL']){
         // the fire button also steers, so your thumb can aim and shoot at once
@@ -205,7 +211,11 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     el('#shName').textContent = w.name; el('#shAmmo').classList.toggle('low', !w.melee && a.mag <= Math.ceil(w.mag * 0.2));
     for (const b of el('#shSlots').children) b.setAttribute('aria-pressed', String(b.dataset.w === f.weapon));
     const st = S.stats;
-    if (S.mode === 'bots'){
+    if (S.team){
+      const a = teamOf(0), b = teamOf(1), r = S.round, hp = Math.max(0, Math.ceil(f.hp));
+      el('#shStats').innerHTML = `Task Force <b>${S.score[0]}</b> – <b>${S.score[1]}</b> Traders · Alive <b>${a.filter(x => x.alive).length}</b> v <b>${b.filter(x => x.alive).length}</b> · ${clock(r.t)} · Kills <b>${f.kills}</b>`;
+      el('#shHpN').textContent = hp; el('#shHpBar').style.width = hp + '%'; el('#shHp').classList.toggle('low', hp <= 35);
+    } else if (S.fight){
       const top = S.bots.reduce((a, b) => b.kills > a.kills ? b : a, S.bots[0]), hp = Math.max(0, Math.ceil(f.hp));
       el('#shStats').innerHTML = `Kills <b>${f.kills}</b> · Assists <b>${S.assists}</b> · Deaths <b>${f.deaths}</b> · Top bot <b>${top.name} ${top.kills}</b> · ${S.diff}`;
       el('#shHpN').textContent = hp; el('#shHpBar').style.width = hp + '%'; el('#shHp').classList.toggle('low', hp <= 35);
@@ -258,7 +268,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     const f = S.me, id = f.weapon, w = W[id], o = eye(), shot = R.fire(f, aimDir(), moveState(), S.now, Math.random);
     if (!shot) return false;
     bang(id); S.stats.shots++;
-    if (S.mode === 'bots') BOTS.hearShot(S.bots, f.x, f.z, f, botWorld());
+    if (S.fight) BOTS.hearShot(S.bots, f.x, f.z, f, botWorld());
     if (w.melee){
       S.swing = 1;
       const hit = R.knifeTrace(o, shot.dirs[0], S.targets, near, f);
@@ -282,7 +292,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   }
   function report(T, parts, killed){
     const p = parts[0]; floatNum(p.at[0], p.at[1], p.at[2], p.d, p.head); hitMark(p.head); click(0.22, p.head ? 4800 : 3400);
-    if (S.mode === 'bots'){ T.lastHitBy = S.me; T.lastHitAt = S.now; T.meHitAt = S.now; if (killed) downed(T, S.me); }
+    if (S.fight){ T.lastHitBy = S.me; T.lastHitAt = S.now; T.meHitAt = S.now; if (killed) downed(T, S.me); }
     else if (killed){ S.stats.kills++; T.deadT = 3.5; fall(T, S.me.x, S.me.z); elim('Target'); }
   }
   function setTrigger(v){ if (v && !S.trigger) S.pressed = true; S.trigger = v; }
@@ -369,25 +379,29 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   }
   /* ---------------- a health bar over every fighter */
   const BARG = new THREE.PlaneGeometry(1, 1), BARBG = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.55, fog:false, depthWrite:false });
-  function addBar(T){
-    const g = new THREE.Group(), bg = new THREE.Mesh(BARG, BARBG), fg = new THREE.Mesh(BARG, new THREE.MeshBasicMaterial({ color:0x3fbf5f, fog:false, depthWrite:false }));
-    bg.scale.set(0.56, 0.085, 1); fg.position.z = 0.002; g.add(bg, fg); g.renderOrder = 2; fg.renderOrder = 3; bg.renderOrder = 2; scene.add(g); T.bar = { g, fg };
+  function addBar(T, ally){
+    const g = new THREE.Group(), bgm = ally ? new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.55, fog:false, depthWrite:false, depthTest:false }) : BARBG, bg = new THREE.Mesh(BARG, bgm), fg = new THREE.Mesh(BARG, new THREE.MeshBasicMaterial({ color:0x3fbf5f, fog:false, depthWrite:false, depthTest:!ally }));
+    bg.scale.set(0.56, 0.085, 1); fg.position.z = 0.002; g.add(bg, fg); g.renderOrder = 2; fg.renderOrder = 3; bg.renderOrder = 2; scene.add(g); T.bar = { g, fg, ally };
+    if (ally){   // teammates show their name, and you can see them through walls
+      const c = document.createElement('canvas'); c.width = 256; c.height = 64; const x = c.getContext('2d'); x.font = '800 40px Arial'; x.textAlign = 'center'; x.fillStyle = '#8fc1ff'; x.strokeStyle = '#000'; x.lineWidth = 6; x.strokeText(T.name, 128, 46); x.fillText(T.name, 128, 46);
+      const n = new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c), depthTest:false, depthWrite:false, fog:false, transparent:true })); n.scale.set(0.9, 0.225, 1); n.position.y = 0.17; n.renderOrder = 4; g.add(n);
+    }
   }
   function drawBars(){
-    for (const T of S.targets){
+    for (const T of S.fight ? S.bots : S.targets){
       const B = T.bar; if (!B) continue; const d = Math.hypot(T.x - camera.position.x, T.z - camera.position.z);
-      B.g.visible = T.alive && d < 90; if (!B.g.visible) continue;
+      B.g.visible = T.alive && (d < 90 || B.ally); if (!B.g.visible) continue;
       const h = T.hp / T.maxHp, zoom = Math.max(1, d / 22); B.g.position.set(T.x, T.y + 2.02, T.z); B.g.quaternion.copy(camera.quaternion); B.g.scale.setScalar(zoom);
-      B.fg.scale.set(0.52 * Math.max(0.001, h), 0.05, 1); B.fg.position.x = -0.26 * (1 - h); B.fg.material.color.setHex(h > 0.6 ? 0x3fbf5f : h > 0.3 ? 0xe5b12a : 0xe1201a);
+      B.fg.scale.set(0.52 * Math.max(0.001, h), 0.05, 1); B.fg.position.x = -0.26 * (1 - h); B.fg.material.color.setHex(B.ally ? 0x3a8bff : h > 0.6 ? 0x3fbf5f : h > 0.3 ? 0xe5b12a : 0xe1201a);
     }
   }
   function elim(name){ const e = el('#shElim'); e.innerHTML = `<b>Dropped</b> ${name}`; e.style.opacity = 1; clearTimeout(S.elimT); S.elimT = setTimeout(() => { e.style.opacity = 0; }, 1500); }
   function botShot(b, shot, o){
-    const w = W[shot.weapon], d0 = Math.hypot(b.x - S.me.x, b.z - S.me.z), hand = b.A.gun, world = S.W;
+    const w = W[shot.weapon], d0 = Math.hypot(b.x - camera.position.x, b.z - camera.position.z), hand = b.A.gun, world = S.W;
     bang(shot.weapon, Math.max(1, d0));
     b.A.flashT = 0.05; BOTS.hearShot(S.bots, b.x, b.z, b, world);
     hand.updateWorldMatrix(true, false); hand.getWorldPosition(_a);
-    const all = [S.me, ...S.bots], hits = new Map();
+    const all = S.W.fighters.filter(f => b.team === null || f.team !== b.team), hits = new Map();   // no friendly fire
     shot.dirs.forEach((d, i) => {
       const hit = R.traceShot(o, d, w.range, all, near, b), x = o[0] + d[0] * hit.t, y = o[1] + d[1] * hit.t, z = o[2] + d[2] * hit.t;
       if (i % 3 === 0) tracer(_a.x, _a.y, _a.z, x, y, z);
@@ -405,21 +419,105 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     const nm = f => f === S.me ? 'You' : f.name; feed(`${nm(by)} <b>dropped</b> ${nm(T)}`);
     if (by === S.me) elim(T.name);
     else if (T !== S.me && T.meHitAt && S.now - T.meHitAt < 6){ S.assists++; feed('Assist on ' + T.name); }
-    if (T === S.me){ S.deadT = 4; P.frozen = true; S.trigger = false; S.ads = false; el('#shDead').hidden = false; el('#shDeadBy').textContent = `${by.name} got you with the ${W[by.weapon].name.toLowerCase()}`; }
-    else { T.deadT = 5 + Math.random() * 2; T.meHitAt = 0; S.stats.kills += by === S.me ? 1 : 0; fall(T, by.x, by.z); }
+    if (T === S.me){ S.deadT = S.team ? 2 : 4; S.deadAge = 0; if (S.team){ T.ry = P.yaw + Math.PI; T.A.root.position.set(P.x, P.y, P.z); T.deadT = 1e9; fall(T, by.x, by.z); } P.frozen = true; S.trigger = false; S.ads = false; el('#shDead').hidden = false; el('#shDeadBy').textContent = `${by.name} got you with the ${W[by.weapon].name.toLowerCase()}`; }
+    else { T.deadT = S.team ? 1e9 : 5 + Math.random() * 2; T.meHitAt = 0; S.stats.kills += by === S.me ? 1 : 0; fall(T, by.x, by.z); }
+    if (S.team) checkRound();
   }
   function tickBots(dt){
     const Wd = botWorld(); let f = S.me; f.x = P.x; f.y = P.y; f.z = P.z; f.stance = S.stance; f.proneYaw = Math.atan2(-Math.sin(P.yaw), -Math.cos(P.yaw)); const m = moveState(); f.speed = m.moving ? (m.running ? 7 : 4.3) : 0;
-    if (S.deadT > 0){ S.deadT -= dt; if (S.deadT <= 0){ const keep = { kills:f.kills, deaths:f.deaths, w:f.weapon }; const s = farSpot(); S.me = Object.assign(R.newFighter({ weapon:keep.w }), { kills:keep.kills, deaths:keep.deaths, x:s[0], z:s[1] }); Wd.fighters[0] = S.me; P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); P.frozen = false; P.vy = 0; el('#shDead').hidden = true; setStance(0); } }
+    if (S.deadT > 0 && S.team){ S.deadT -= dt; if (S.deadT <= 0) enterSpec(); }
+    else if (S.deadT > 0){ S.deadT -= dt; if (S.deadT <= 0){ const keep = { kills:f.kills, deaths:f.deaths, w:f.weapon }; const s = farSpot(); S.me = Object.assign(R.newFighter({ weapon:keep.w }), { kills:keep.kills, deaths:keep.deaths, x:s[0], z:s[1] }); Wd.fighters[0] = S.me; P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); P.frozen = false; P.vy = 0; el('#shDead').hidden = true; setStance(0); } }
     for (const b of S.bots){
-      if (!b.alive){ b.deadT -= dt; if (b.deadT <= 0){ BOTS.respawn(b, farSpot(), Wd); standUp(b); } else { tickFall(b, dt); continue; } }
-      BOTS.step(b, dt, Wd);
+      if (!b.alive){ if (!S.team) b.deadT -= dt; if (b.deadT <= 0){ BOTS.respawn(b, farSpot(), Wd); standUp(b); } else { tickFall(b, dt); continue; } }
+      if (S.team && (S.round.freeze > 0 || S.round.over > 0)){ b.speed = 0; b.vx = b.vz = 0; } else BOTS.step(b, dt, Wd);
       b.A.root.position.set(b.x, b.y, b.z); b.A.root.rotation.set(0, b.ry, 0);
       animBody(b, dt);
       if (b.alive){ aimPose(b); const fl = b.A.gun.userData.fl; if (b.A.flashT > 0){ b.A.flashT -= dt; fl.visible = true; } else fl.visible = false; }
     }
+    if (S.team && !f.alive) tickFall(f, dt);
     if (S.hurtT > 0){ S.hurtT -= dt; el('#shHurt').style.opacity = Math.min(1, S.hurtT * 3); const dd = el('#shDir'); dd.style.opacity = Math.min(1, S.hurtT * 3); dd.style.transform = `rotate(${(P.yaw + Math.PI - S.hurtFrom) * 180 / Math.PI}deg)`; }
     else { el('#shHurt').style.opacity = 0; el('#shDir').style.opacity = 0; }
+  }
+
+  /* ---------------- team battle: rounds with no respawns, first to three wins */
+  const WIN_AT = 3, ROUND_TIME = 180, FREEZE = 2.5, BETWEEN = 4.5;
+  const teamOf = i => S.W.fighters.filter(f => f.team === i), clock = t => { t = Math.max(0, Math.ceil(t)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+  function banner(title, sub, cls){ const b = el('#shBanner'); b.hidden = !title; b.className = cls || ''; b.children[0].textContent = title || ''; b.children[1].textContent = sub || ''; }
+  function huddle(c, n){
+    const list = nav().cells.map(nav().centre).sort((a, b) => Math.hypot(a[0] - c[0], a[1] - c[1]) - Math.hypot(b[0] - c[0], b[1] - c[1])), out = [];
+    for (const p of list){ if (out.every(q => Math.hypot(p[0] - q[0], p[1] - q[1]) >= 2.4)){ out.push(p); if (out.length === n) break; } }
+    return out;
+  }
+  function pickBases(){
+    const n = nav(), a = n.randomSpot(Math.random); let b = a, bd = 0;
+    for (const k of n.cells){ const p = n.centre(k), d = Math.hypot(p[0] - a[0], p[1] - a[1]); if (d > bd){ bd = d; b = p; } }
+    let c = b; bd = 0; for (const k of n.cells){ const p = n.centre(k), d = Math.hypot(p[0] - b[0], p[1] - b[1]); if (d > bd){ bd = d; c = p; } }
+    S.bases = [b, c];
+  }
+  function newRound(n){
+    const flip = n % 2 === 0, home = S.bases[flip ? 1 : 0], away = S.bases[flip ? 0 : 1], Wd = botWorld();
+    S.round = { n, t:ROUND_TIME, freeze:FREEZE, over:0, done:false }; Wd.intel = {};
+    const us = huddle(home, 5), them = huddle(away, 5), f = S.me, s = us[0];
+    const A = f.A; if (f.fall && f.fall.pool) scene.remove(f.fall.pool); f.fall = null;
+    S.me = Object.assign(R.newFighter({ weapon:f.weapon, team:0 }), { kills:f.kills, deaths:f.deaths, x:s[0], z:s[1], A }); Wd.fighters[0] = S.me;
+    A.root.visible = false; A.root.rotation.set(0, 0, 0);
+    P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); S.me.y = P.y; P.vy = 0; P.pitch = 0; P.yaw = Math.atan2(-(away[0] - s[0]), -(away[1] - s[1])); P.frozen = true; S.vx = S.vz = 0; S.deadT = 0; S.spec = null; S.climb = null;
+    S.stance = 1; setStance(0); S.eyeDrop = 0; S.hurtT = 0; el('#shDead').hidden = true; el('#shSpec').hidden = true;
+    let a = 1, e = 0;
+    for (const b of S.bots){ const p = b.team === 0 ? us[a++] : them[e++]; BOTS.respawn(b, p, Wd); standUp(b); const to = b.team === 0 ? away : home; b.ry = b.aimYaw = Math.atan2(to[0] - p[0], to[1] - p[1]); b.meHitAt = 0; }
+    banner('Round ' + n, `Task Force ${S.score[0]} – ${S.score[1]} Traders · first to ${WIN_AT}`);
+  }
+  function endRound(winner, why){
+    const r = S.round; if (r.done) return; r.done = true; r.over = BETWEEN; S.lastWhy = why;
+    if (winner !== null) S.score[winner]++;
+    const mine = winner === 0;
+    banner(winner === null ? 'Draw' : mine ? 'Round won' : 'Round lost', why, winner === null ? '' : mine ? 'win' : 'lose');
+    thump(0.3, mine ? 220 : 110, 0.4);
+  }
+  function checkRound(){
+    if (S.round.done) return;
+    const a = teamOf(0).filter(f => f.alive).length, b = teamOf(1).filter(f => f.alive).length;
+    if (!b) endRound(0, 'All the Traders are down'); else if (!a) endRound(1, 'The Task Force is wiped out');
+  }
+  function tickRound(dt){
+    const r = S.round; if (S.ended) return;
+    if (r.over > 0){
+      r.over -= dt;
+      if (r.over <= 0){ if (S.score[0] >= WIN_AT || S.score[1] >= WIN_AT) showEnd(); else newRound(r.n + 1); }
+      return;
+    }
+    if (r.freeze > 0){ r.freeze -= dt; if (r.freeze <= 0){ P.frozen = false; banner('Go', 'Find them', ''); setTimeout(() => { if (S.team && S.round === r && !r.done) banner(); }, 900); } return; }
+    r.t -= dt;
+    if (r.t <= 0){   // time up: most fighters left wins, then most health
+      const left = i => teamOf(i).filter(f => f.alive), n = [left(0).length, left(1).length], hp = [0, 1].map(i => left(i).reduce((v, f) => v + f.hp, 0));
+      endRound(n[0] !== n[1] ? (n[0] > n[1] ? 0 : 1) : hp[0] !== hp[1] ? (hp[0] > hp[1] ? 0 : 1) : null, 'Time up');
+    }
+  }
+  function enterSpec(){
+    el('#shDead').hidden = true; S.me.A.root.visible = true;
+    if (!teamOf(0).some(f => f.alive)) return;
+    S.spec = { i:0 }; el('#shSpec').hidden = false;
+  }
+  function tickSpec(){
+    if (!S.spec) return;
+    const mates = teamOf(0).filter(f => f.alive); if (!mates.length){ el('#shSpec').hidden = true; return; }
+    const m = mates[S.spec.i % mates.length], sx = Math.sin(m.aimYaw), cx = Math.cos(m.aimYaw), o = [m.x, m.y + 1.9, m.z], d = [-sx * 0.9, 0.2, -cx * 0.9], l = Math.hypot(...d), u = d.map(v => v / l), far = Math.max(0.6, Math.min(3.4, R.rayWorld(o, u, 3.4, near) - 0.25));
+    camera.position.set(o[0] + u[0] * far, o[1] + u[1] * far, o[2] + u[2] * far); camera.lookAt(m.x + sx * 8, m.y + 1.3, m.z + cx * 8);
+    el('#shSpecName').textContent = m.name;
+  }
+  function showEnd(){
+    S.ended = true; setTrigger(false); S.ads = false; P.frozen = true; banner(); el('#shSpec').hidden = true; el('#shDead').hidden = true;
+    const won = S.score[0] > S.score[1], h = el('#shEndT'); h.textContent = won ? 'You won' : 'You lost'; h.className = won ? 'win' : 'lose';
+    el('#shEndS').textContent = `Task Force ${S.score[0]} – ${S.score[1]} Traders · ${S.diff}`;
+    const row = f => `<tr class="${f === S.me ? 'me' : ''}"><td>${f === S.me ? 'You' : f.name}</td><td>${f.kills || 0}</td><td>${f.deaths || 0}</td></tr>`;
+    const list = (i, name) => `<table><tr class="sep"><td>${name}</td><td>Kills</td><td>Deaths</td></tr>${teamOf(i).sort((a, b) => (b.kills || 0) - (a.kills || 0)).map(row).join('')}</table>`;
+    el('#shEndB').innerHTML = `<section>${list(0, 'Task Force')}${list(1, 'Traders')}</section>${S.assists ? `<p style="margin-top:8px">You also got ${S.assists} assist${S.assists > 1 ? 's' : ''}</p>` : ''}`;
+    el('#shEnd').hidden = false;
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+  function mapDots(g, M){
+    if (!S.active || !S.team) return;
+    for (const f of teamOf(0)){ if (f === S.me || !f.alive) continue; g.fillStyle = '#3a8bff'; g.strokeStyle = '#08080b'; g.lineWidth = 3; g.beginPath(); g.arc((f.x - M.ox) * M.s, (f.z - M.oz) * M.s, 8, 0, Math.PI * 2); g.stroke(); g.fill(); }
   }
 
   /* ---------------- first-person gun movement */
@@ -470,7 +568,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     _b.set(1, 0, 0).applyQuaternion(camera.quaternion);
     camera.position.x += _b.x * S.bobX; camera.position.z += _b.z * S.bobX; camera.position.y += S.bobY - Math.sin(S.land * Math.PI) * 0.09;
     let z = S.roll;
-    if (!alive){ const t = Math.min(1, (4 - S.deadT) / 0.7); camera.position.y -= t * t * 1.25; z += t * 0.55; }
+    if (!alive){ S.deadAge += dt; const t = Math.min(1, S.deadAge / 0.7); camera.position.y -= t * t * 1.25; z += t * 0.55; }
     camera.rotation.z = z;
   }
   /* ---------------- ladders up the side of buildings, for getting a sniper onto the roof */
@@ -528,41 +626,46 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   }
   function start(opts = {}){
     if (S.active || !GAME.S.ready) return;
-    S.mode = opts.mode || 'range'; S.diff = opts.diff || 'medium';
+    S.mode = opts.mode || 'range'; S.diff = opts.diff || 'medium'; S.fight = S.mode !== 'range'; S.team = S.mode === 'team'; S.ended = false; S.spec = null; S.round = null;
     buildHud(); makeFx(); audio(); loadShots();
     const spots = streetSpots(), s = spots[Math.floor(spots.length / 2)];
     P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); P.vy = 0; P.yaw = 0; P.pitch = 0; P.fly = false; P.frozen = false;
     S.me = Object.assign(R.newFighter({ weapon:'rifle' }), { kills:0, deaths:0, x:P.x, y:P.y, z:P.z }); S.deadT = 0; S.hurtT = 0; S.vx = S.vz = 0; S.stance = 0; S.eyeDrop = 0; S.crouchAt = 0; S.assists = 0; S.climb = null; S.sprintT = 0; S.baseSens = SENS; S.stats = { shots:0, hits:0, heads:0, kills:0 }; S.now = 0; S.ads = false; S.adsT = 0; S.trigger = false; S.pressed = false; S.targets = [];
     S.bots = [];
-    if (S.mode === 'bots'){
-      S.W = { fighters:[S.me], near, nav:nav(), groundAt:(x, z, y) => groundAt(x, z, y), rand:Math.random, now:0, onShot:botShot };
+    if (S.fight){
+      S.W = { fighters:[S.me], near, nav:nav(), groundAt:(x, z, y) => groundAt(x, z, y), rand:Math.random, now:0, onShot:botShot, intel:{} };
       for (let i = 0; i < 9; i++){
-        const s = farSpot(), b = BOTS.newBot({ id:'b' + i, name:NAMES[i], x:s[0], z:s[1], weapon:ARMS_FOR[i] }, S.diff);
-        b.y = groundAt(s[0], s[1], 2); b.A = GAME.debug.makeAvatar(CHAR_LIST[i % 3]); outfit(b); addBar(b); S.bots.push(b); S.W.fighters.push(b);
+        const s = farSpot(), team = S.team ? (i < 4 ? 0 : 1) : null, b = BOTS.newBot({ id:'b' + i, name:NAMES[i], x:s[0], z:s[1], weapon:ARMS_FOR[i], team }, S.diff);
+        b.y = groundAt(s[0], s[1], 2); b.A = GAME.debug.makeAvatar(S.team ? (team === 0 ? 'task_force' : i % 2 ? 'trader_man' : 'trader_woman') : CHAR_LIST[i % 3]); outfit(b); addBar(b, team === 0); S.bots.push(b); S.W.fighters.push(b);
       }
-      S.targets = S.bots;
+      S.targets = S.team ? S.bots.filter(b => b.team === 1) : S.bots;
+      if (S.team){ S.me.team = 0; S.me.A = GAME.debug.makeAvatar('task_force'); S.me.A.b = {}; S.score = [0, 0]; pickBases(); newRound(1); }
     } else spawnTargets(spots);
     buildLadders();
     MUSIC.stop(); started = true; S.active = true; el('#start').hidden = true; el('#shHud').hidden = false; setPaused(false);
     document.body.classList.add('sh-on'); document.body.classList.toggle('sh-touch', TOUCH);
     el('#shHp').hidden = S.mode !== 'bots'; el('#shDead').hidden = true; el('#shFeed').innerHTML = ''; el('#shHurt').style.opacity = 0;
     if (!TOUCH) canvas.requestPointerLock?.()?.catch?.(() => {});
-    toast(S.mode === 'bots' ? 'Nine bots dey hunt you. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
+    toast(S.team ? 'Your team is in blue. Drop all five Traders' : S.fight ? 'Nine bots dey hunt you. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
   }
   function stop(){
     if (!S.active) return;
     S.active = false; started = false; P.frozen = false; WALK = STAND.WALK; RUN = STAND.RUN; HEAD = R.STANCE[0].height; S.stance = 0; S.eyeDrop = 0; S.crouchAt = 0; SENS = S.baseSens; rig.visible = true; S.scoped = false; el('#shScope').hidden = true; el('#shHint').hidden = true; el('#shElim').style.opacity = 0; camera.rotation.z = 0; clearLadders(); camera.fov = STAND.fov; camera.updateProjectionMatrix();
-    for (const T of S.targets){ if (T.fall && T.fall.pool) scene.remove(T.fall.pool); if (T.bar) scene.remove(T.bar.g); scene.remove(T.A.root); } S.targets = []; S.bots = [];
+    for (const T of new Set([...S.targets, ...S.bots, ...(S.me && S.me.A ? [S.me] : [])])){ if (T.fall && T.fall.pool) scene.remove(T.fall.pool); if (T.bar) scene.remove(T.bar.g); scene.remove(T.A.root); } S.targets = []; S.bots = [];
+    S.spec = null; S.ended = false; S.round = null; S.team = false; S.fight = false; banner(); el('#shEnd').hidden = true; el('#shSpec').hidden = true; el('#shDead').hidden = true;
     for (const g of [...FX.tr, ...FX.puff]){ g.m.visible = false; g.life = 0; } for (const m of FX.mark) m.visible = false;
     el('#shHud').hidden = true; el('#start').hidden = false; document.body.classList.remove('sh-on', 'sh-touch');
     if (document.pointerLockElement) document.exitPointerLock(); MUSIC.start();
   }
   function tick(dt){
     if (!S.active) return;
-    if (S.paused){ camera.position.y -= S.eyeDrop; return; }
+    if (S.paused || S.ended){ camera.position.y -= S.eyeDrop; return; }
     S.now += dt; if (S.W) S.W.now = S.now; let f = S.me; const w = W[f.weapon];
     R.tick(f, dt, S.now); tickStance(dt);
-    const canShoot = S.sprintT < 0.35 && !S.climb;
+    if (S.team) tickRound(dt);
+    if (S.ended) return;
+    f = S.me;
+    const canShoot = S.sprintT < 0.35 && !S.climb && !(S.team && (S.round.freeze > 0));
     if (canShoot && (S.pressed || (S.trigger && w.auto))){
       const fired = shoot();
       if (fired && w.scope) setTimeout(() => { if (S.active){ click(0.2, 1300); setTimeout(() => S.active && click(0.22, 1800), 240); } }, 380);
@@ -578,8 +681,8 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     SENS = S.baseSens * (w.scope && S.adsT > 0.5 ? 0.3 : 1 - S.adsT * 0.35);
     tickLadder(dt); tickBody(dt);
     const fov = STAND.fov + ((w.zoom || STAND.fov) - STAND.fov) * S.adsT; if (Math.abs(camera.fov - fov) > 0.01){ camera.fov = fov; camera.updateProjectionMatrix(); }
-    if (S.mode === 'bots') tickBots(dt); else tickTargets(dt);
-    tickFx(dt); drawGun(dt); drawCross(dt); drawHud(); drawBars();
+    if (S.fight) tickBots(dt); else tickTargets(dt);
+    tickFx(dt); drawGun(dt); drawCross(dt); drawHud(); drawBars(); tickSpec();
   }
   function render(){
     if (!S.active) return;
@@ -587,6 +690,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   }
   addEventListener('mousedown', e => {
     if (!S.active || S.paused || document.pointerLockElement !== canvas) return;
+    if (S.spec){ if (e.button === 0) S.spec.i++; return; }
     if (e.button === 0) setTrigger(true); else if (e.button === 2) S.ads = true;
   });
   addEventListener('mouseup', e => { if (!S.active) return; if (e.button === 0) setTrigger(false); else if (e.button === 2) S.ads = false; });
@@ -600,11 +704,11 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   });
   addEventListener('keyup', e => { if (S.active && e.code === 'KeyC') crouchUp(); });
   addEventListener('wheel', e => { if (!S.active || document.pointerLockElement !== canvas) return; const i = R.ORDER.indexOf(S.me.weapon), n = R.ORDER.length; swap(R.ORDER[(i + (e.deltaY > 0 ? 1 : n - 1)) % n]); }, { passive:true });
-  document.addEventListener('pointerlockchange', () => { if (S.active && !TOUCH && !window.__TEST) setPaused(document.pointerLockElement !== canvas); });
+  document.addEventListener('pointerlockchange', () => { if (S.active && !S.ended && !TOUCH && !window.__TEST) setPaused(document.pointerLockElement !== canvas); });
   function momentum(mx, mz, dt){
     const k = 1 - Math.exp(-dt * (P.onGround ? 11 : 2.5)); S.vx += (mx - S.vx) * k; S.vz += (mz - S.vz) * k;
     return S.climb ? [0, 0] : [S.vx, S.vz];
   }
-  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, momentum, noJump, setStance };
+  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, momentum, noJump, setStance, mapDots };
 })();
 window.SHOOTER = SHOOTER;
