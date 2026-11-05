@@ -2030,7 +2030,7 @@ const GAME = (() => {
     await Promise.all(Object.keys(list).filter(n => !S.chars[n]).map(async n => prepChar(n, (await get(n)).scene, list[n], true)));
     // the first-person arms are a separate, far more detailed model, so fingers keep their shape right in front of your eyes
     await Promise.all(Object.keys(arms).filter(n => !S.armScenes[n]).map(async n => { const r = (await get(arms[n])).scene; r.traverse(o => { const w = o.isSkinnedMesh && o.geometry.attributes.skinWeight; if (w && w.normalized && !(w.array instanceof Float32Array)){ const d = w.array instanceof Uint16Array ? 65535 : 255, f = new Float32Array(w.count * 4); for (let i = 0; i < w.count; i++){ f[i * 4] = w.getX(i) / d; f[i * 4 + 1] = w.getY(i) / d; f[i * 4 + 2] = w.getZ(i) / d; f[i * 4 + 3] = w.getW(i) / d; } o.geometry.setAttribute('skinWeight', new THREE.BufferAttribute(f, 4)); } }); S.armScenes[n] = r; }));
-    for (const name in S.chars){
+    for (const name in list){
       if (S.rifle[name]) continue;
       const posed = THREE.SkeletonUtils.clone(S.chars[name].root); matchPose(rifleSrc.scene, posed);
       S.rifle[name] = {};

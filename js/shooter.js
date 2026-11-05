@@ -429,11 +429,66 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     root.hidden = false; draw();
   }
   // start a shooter mode, showing the guide first if this is the player's first time
-  const FIGHTERS = { zombie_tank:1.85, tf:1.8 }, ARM_FILES = { tf:'tf_arms' }, ME_CHAR = 'tf';
-  let readyP = null;
-  function ready(){ return readyP || (readyP = GAME.debug.loadFighters(FIGHTERS, ARM_FILES).catch(e => { readyP = null; throw e; })); }
-  function play(opts){
-    const go = () => { if (!GAME.S.ready) return; toast('Getting fighters ready'); ready().then(() => start(opts)).catch(e => { console.warn(e); toast('Could not load the fighters. Check your connection and try again'); }); };
+  /* ---------------- the fighters. Add a line here and drop the files in chars/ and art/p/ to bring in a new one. */
+  const TEAMS = { task:{ name:'Task Force', c:'#e1201a' }, zombies:{ name:'Zombies', c:'#7fbf3f' }, traders:{ name:'Traders', c:'#ffb020' }, heroes:{ name:'Heroes', c:'#3a8bff' } };
+  const ROSTER = [
+    { id:'tf', name:'Sarge', team:'task', h:1.8, arms:'tf_arms' },
+    { id:'zombie_tank', name:'Agbero', team:'zombies', h:1.85 },
+    { id:'trader_man', name:'Emeka', team:'traders' },
+    { id:'trader_woman', name:'Iya Bose', team:'traders' },
+  ];
+  const PICK_KEY = 'kasala-pick', MAX_KINDS = GFX.low ? 5 : 10;
+  const byId = id => ROSTER.find(c => c.id === id), inTeam = t => ROSTER.filter(c => c.team === t), shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  function savedPick(){ try { const c = byId(localStorage.getItem(PICK_KEY)); if (c) return c; } catch (e) {} return ROSTER[0]; }
+  // who is in this match. Only these fighters get downloaded, so a phone never holds the whole cast in memory.
+  function makePlan(opts = {}, me = savedPick()){
+    const P = { me:me.id, mates:[], foes:[], names:[TEAMS[me.team].name, 'Enemy'], others:[] }, teamed = opts.mode === 'team' || (opts.mode === 'br' && opts.squad);
+    const fill = (list, n) => Array.from({ length:n }, (_, i) => list[i % list.length].id);
+    const open = Object.keys(TEAMS).filter(t => inTeam(t).length);
+    if (teamed){
+      const foe = shuffled(open.filter(t => t !== me.team))[0] || me.team, own = shuffled(inTeam(me.team).filter(c => c !== me));
+      P.mates = fill(own.length ? own : [me], 5); P.foes = fill(shuffled(inTeam(foe)), 5); P.names = [TEAMS[me.team].name, TEAMS[foe].name];
+    } else P.others = fill(shuffled(ROSTER.filter(c => c !== me)).slice(0, MAX_KINDS - 1), 9);
+    return P;
+  }
+  function prep(opts = {}, me){
+    const P = S.plan = makePlan(opts, me), list = {}; for (const id of [P.me, ...P.mates, ...P.foes, ...P.others]) list[id] = byId(id).h;
+    const c = byId(P.me); return GAME.debug.loadFighters(list, c.arms ? { [c.id]:c.arms } : {});
+  }
+  const preload = () => prep({ mode:'bots' }).catch(() => {});
+  /* ---------------- pick your team and fighter */
+  function showPicker(opts, done){
+    let root = el('#shPick'), me = savedPick();
+    if (!root){
+      const css = document.createElement('style');
+      css.textContent = `#shPick{position:fixed;inset:0;z-index:40;overflow:auto;background:radial-gradient(70% 110% at 50% 110%,rgba(255,90,20,.3),transparent 62%),#08080b;color:#fff;font:15px/1.3 var(--body);touch-action:pan-y}
+#shPick .pw{max-width:980px;min-height:100%;margin:0 auto;padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 14px max(16px,env(safe-area-inset-left));display:grid;grid-template-rows:auto auto 1fr auto;gap:10px;box-sizing:border-box}
+#shPick h2{margin:0;font:400 clamp(22px,5vh,32px)/1 var(--display);color:#ffd27a}#shPick .pt{display:flex;gap:6px;flex-wrap:wrap}
+#shPick .pt button{min-height:36px;padding:0 12px;border-radius:0;background:rgba(255,255,255,.08);border:0;border-bottom:3px solid transparent;font:800 13px var(--body)}#shPick .pt button[aria-pressed="true"]{color:#fff;background:rgba(255,255,255,.16);border-bottom-color:var(--tc)}
+#shPick .pg{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;align-content:start}
+#shPick .pc{position:relative;padding:0;border:2px solid var(--line);border-radius:0;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(0,0,0,.4));aspect-ratio:3/4;overflow:hidden;min-height:0;max-height:52vh;width:100%}#shPick .pc[aria-pressed="true"]{border-color:var(--tc);box-shadow:0 0 0 2px var(--tc)}
+#shPick .pc img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:bottom}#shPick .pc i{position:absolute;inset:0;display:grid;place-items:center;font:400 42px var(--display);font-style:normal;color:rgba(255,255,255,.28)}
+#shPick .pc[aria-pressed="true"]{color:#fff}#shPick .pc b{position:absolute;left:0;right:0;bottom:0;padding:5px 4px;background:linear-gradient(transparent,rgba(0,0,0,.85));font:800 12px var(--body);text-align:center}
+#shPick .pb{display:grid;grid-template-columns:auto 1fr;gap:10px}#shPick .pb button{min-height:48px;border-radius:0;border:0}#shPick #pickBack{padding:0 18px;background:rgba(255,255,255,.1)}#shPick #pickGo{background:linear-gradient(90deg,#d3160f,#ff6a13);font:400 19px var(--display)}`;
+      document.head.appendChild(css);
+      root = document.createElement('div'); root.id = 'shPick'; root.hidden = true;
+      root.innerHTML = '<div class="pw"><h2></h2><div class="pt"></div><div class="pg"></div><div class="pb"><button id="pickBack">Back</button><button id="pickGo">Fight</button></div></div>';
+      document.body.appendChild(root);
+    }
+    const draw = () => {
+      const open = Object.keys(TEAMS).filter(t => inTeam(t).length), t = TEAMS[me.team]; root.style.setProperty('--tc', t.c);
+      root.querySelector('h2').textContent = opts.mode === 'team' ? 'Choose your team' : 'Choose your fighter';
+      root.querySelector('.pt').innerHTML = open.map(k => `<button data-t="${k}" aria-pressed="${k === me.team}">${TEAMS[k].name}</button>`).join('');
+      root.querySelector('.pg').innerHTML = inTeam(me.team).map(c => `<button class="pc" data-c="${c.id}" aria-pressed="${c === me}" aria-label="${c.name}"><i>${c.name[0]}</i><img src="art/p/${c.id}.webp" alt="" onerror="this.remove()"><b>${c.name}</b></button>`).join('');
+      root.querySelectorAll('[data-t]').forEach(b => { b.onclick = () => { me = inTeam(b.dataset.t)[0]; draw(); }; });
+      root.querySelectorAll('[data-c]').forEach(b => { b.onclick = () => { me = byId(b.dataset.c); draw(); }; });
+    };
+    draw(); root.hidden = false; root.scrollTop = 0;
+    el('#pickBack').onclick = () => { root.hidden = true; };
+    el('#pickGo').onclick = () => { try { localStorage.setItem(PICK_KEY, me.id); } catch (e) {} const b = el('#pickGo'); b.textContent = 'Getting fighters ready…'; b.disabled = true; done(me, () => { b.textContent = 'Fight'; b.disabled = false; root.hidden = true; }, msg => { b.textContent = msg || 'Fight'; b.disabled = false; }); };
+  }
+  function play(opts = {}){
+    const go = () => { if (!GAME.S.ready) return; showPicker(opts, (me, ok, bad) => prep(opts, me).then(() => { ok(); start(opts); }).catch(e => { console.warn(e); bad('Check your connection and try again'); })); };
     if (seenTips()) go(); else showTips(go);
   }
 
@@ -482,7 +537,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
       el('#shArm').hidden = !f.armor; el('#shArmBar').style.width = (f.armor || 0) + '%';
     } else if (S.team){
       const a = teamOf(0), b = teamOf(1), r = S.round, hp = Math.max(0, Math.ceil(f.hp));
-      el('#shStats').innerHTML = `Task Force <b>${S.score[0]}</b> – <b>${S.score[1]}</b> Traders · Alive <b>${a.filter(x => x.alive).length}</b> v <b>${b.filter(x => x.alive).length}</b> · ${clock(r.t)} · Kills <b>${f.kills}</b>`;
+      el('#shStats').innerHTML = `${S.plan.names[0]} <b>${S.score[0]}</b> – <b>${S.score[1]}</b> ${S.plan.names[1]} · Alive <b>${a.filter(x => x.alive).length}</b> v <b>${b.filter(x => x.alive).length}</b> · ${clock(r.t)} · Kills <b>${f.kills}</b>`;
       el('#shHpN').textContent = hp; el('#shHpBar').style.width = hp + '%'; el('#shHp').classList.toggle('low', hp <= 35);
     } else if (S.fight){
       const top = S.bots.reduce((a, b) => b.kills > a.kills ? b : a, S.bots[0]), hp = Math.max(0, Math.ceil(f.hp));
@@ -501,12 +556,12 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   function streetSpots(){ const pts = []; for (const st of LAYOUT.streets) walkLine(st.pts, 5, (x, z) => { if (inPlay(x, z, -4) && !blockedAt(x, z, 0.7)) pts.push([x, z, st.name]); }); return pts; }
   function clearPath(a, b){ const d = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.ceil(d / 1.2); for (let i = 0; i <= n; i++){ const t = i / n; if (blockedAt(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 0.5)) return false; } return true; }
   function spawnTargets(spots){
-    const dbg = GAME.debug, chars = ['tf', 'zombie_tank', 'trader_woman'];
+    const dbg = GAME.debug, chars = S.plan.others;
     const home = spots.slice().sort((a, b) => Math.hypot(a[0] - P.x, a[1] - P.z) - Math.hypot(b[0] - P.x, b[1] - P.z));
     const picks = []; for (const s of home){ const d = Math.hypot(s[0] - P.x, s[1] - P.z); if (d < 8 || picks.some(p => Math.hypot(p[0] - s[0], p[1] - s[1]) < 7)) continue; picks.push(s); if (picks.length === 9) break; }
     picks.forEach((s, i) => {
       const T = R.newFighter({ id:'t' + i, x:s[0], z:s[1] }); T.y = groundAt(s[0], s[1], 2); T.ry = Math.random() * 6.28;
-      T.A = dbg.makeAvatar(chars[i % 3]); rigUp(T.A); T.home = [s[0], s[1]];
+      T.A = dbg.makeAvatar(chars[i % chars.length]); rigUp(T.A); T.home = [s[0], s[1]];
       const other = home.find(o => { const d = Math.hypot(o[0] - s[0], o[1] - s[1]); return d > 7 && d < 18 && clearPath(s, o); });
       T.path = i % 3 !== 2 && other ? [[s[0], s[1]], [other[0], other[1]]] : null; T.leg = 1; T.wait = Math.random() * 2; T.deadT = 0; addBar(T);
       S.targets.push(T);
@@ -576,7 +631,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
 
   /* ---------------- bots: they walk the market, hunt each other and hunt you */
   const NAMES = ['Chidi', 'Bisi', 'Tunde', 'Ngozi', 'Emeka', 'Aisha', 'Musa', 'Funke', 'Segun'];
-  const CHAR_LIST = ['tf', 'zombie_tank', 'trader_man', 'trader_woman'], ARMS_FOR = ['rifle', 'smg', 'rifle', 'pistol', 'shotgun', 'smg', 'rifle', 'sniper', 'shotgun'];
+  const ARMS_FOR = ['rifle', 'smg', 'rifle', 'pistol', 'shotgun', 'smg', 'rifle', 'sniper', 'shotgun'];
   let NAV = null;
   function nav(){ return NAV || (NAV = BOTS.makeNav(LAYOUT.play, (x, z) => inPlay(x, z, -1.5) && !blockedAt(x, z, 0.5) && !inFootprint(x, z, 0.15))); }
   function botWorld(){ const w = S.W; w.now = S.now; return w; }
@@ -926,7 +981,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     S.stance = 1; setStance(0); S.eyeDrop = 0; S.hurtT = 0; el('#shDead').hidden = true; el('#shSpec').hidden = true;
     let a = 1, e = 0;
     for (const b of S.bots){ const p = b.team === 0 ? us[a++] : them[e++]; BOTS.respawn(b, p, Wd); standUp(b); const to = b.team === 0 ? away : home; b.ry = b.aimYaw = Math.atan2(to[0] - p[0], to[1] - p[1]); b.meHitAt = 0; }
-    banner('Round ' + n, `Task Force ${S.score[0]} – ${S.score[1]} Traders · first to ${WIN_AT}`);
+    banner('Round ' + n, `${S.plan.names[0]} ${S.score[0]} – ${S.score[1]} ${S.plan.names[1]} · first to ${WIN_AT}`);
   }
   function endRound(winner, why){
     const r = S.round; if (r.done) return; r.done = true; r.over = BETWEEN; S.lastWhy = why;
@@ -938,7 +993,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   function checkRound(){
     if (S.round.done) return;
     const a = teamOf(0).filter(f => f.alive).length, b = teamOf(1).filter(f => f.alive).length;
-    if (!b) endRound(0, 'All the Traders are down'); else if (!a) endRound(1, 'The Task Force is wiped out');
+    if (!b) endRound(0, `${S.plan.names[1]} wiped out`); else if (!a) endRound(1, `${S.plan.names[0]} wiped out`);
   }
   function tickRound(dt){
     const r = S.round; if (S.ended) return;
@@ -969,10 +1024,10 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   function showEnd(){
     S.ended = true; setTrigger(false); S.ads = false; P.frozen = true; banner(); el('#shSpec').hidden = true; el('#shDead').hidden = true;
     const won = S.score[0] > S.score[1], h = el('#shEndT'); h.textContent = won ? 'You won' : 'You lost'; h.className = won ? 'win' : 'lose';
-    el('#shEndS').textContent = `Task Force ${S.score[0]} – ${S.score[1]} Traders · ${S.diff}`;
+    el('#shEndS').textContent = `${S.plan.names[0]} ${S.score[0]} – ${S.score[1]} ${S.plan.names[1]} · ${S.diff}`;
     const row = f => `<tr class="${f === S.me ? 'me' : ''}"><td>${f === S.me ? 'You' : f.name}</td><td>${f.kills || 0}</td><td>${f.deaths || 0}</td></tr>`;
     const list = (i, name) => `<table><tr class="sep"><td>${name}</td><td>Kills</td><td>Deaths</td></tr>${teamOf(i).sort((a, b) => (b.kills || 0) - (a.kills || 0)).map(row).join('')}</table>`;
-    el('#shEndB').innerHTML = `<section>${list(0, 'Task Force')}${list(1, 'Traders')}</section>${S.assists ? `<p style="margin-top:8px">You also got ${S.assists} assist${S.assists > 1 ? 's' : ''}</p>` : ''}`;
+    el('#shEndB').innerHTML = `<section>${list(0, S.plan.names[0])}${list(1, S.plan.names[1])}</section>${S.assists ? `<p style="margin-top:8px">You also got ${S.assists} assist${S.assists > 1 ? 's' : ''}</p>` : ''}`;
     el('#shEnd').hidden = false;
     if (document.pointerLockElement) document.exitPointerLock();
   }
@@ -1097,7 +1152,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     hint.hidden = !show || !!S.climb; if (show) hint.textContent = P.y > 2 ? 'Hold back to climb down' : 'Hold forward to climb';
   }
   function start(opts = {}){
-    if (S.active || !GAME.S.ready) return;
+    if (S.active || !GAME.S.ready || !S.plan) return;
     S.mode = opts.mode || 'range'; S.diff = opts.diff || 'medium'; S.fight = S.mode !== 'range'; S.team = S.mode === 'team'; S.br = S.mode === 'br' ? {} : null; S.squad = !!(S.br && opts.squad); S.oneLife = S.team || !!S.br; S.ended = false; S.spec = null; S.round = null;
     buildHud(); setView(savedView()); makeFx(); audio(); loadShots();
     const spots = streetSpots(), s = spots[Math.floor(spots.length / 2)];
@@ -1105,12 +1160,12 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     const kit = S.br ? { weapon:'pistol', loadout:['pistol', 'knife'] } : { weapon:'rifle' };
     S.me = Object.assign(R.newFighter(kit), { kills:0, deaths:0, x:P.x, y:P.y, z:P.z }); S.deadT = 0; S.hurtT = 0; S.vx = S.vz = 0; S.stance = 0; S.eyeDrop = 0; S.crouchAt = 0; S.assists = 0; S.climb = null; S.sprintT = 0; S.baseSens = SENS; S.stats = { shots:0, hits:0, heads:0, kills:0 }; S.now = 0; S.ads = false; S.adsT = 0; S.trigger = false; S.pressed = false; S.targets = [];
     S.bots = [];
-    S.me.A = GAME.debug.makeAvatar(ME_CHAR); outfit(S.me); S.me.A.gearId = S.me.weapon; S.me.A.root.visible = false; S.tpT = S.view === 'tp' ? 1 : 0; buildArms(ME_CHAR); ARMS.id = null;
+    S.me.A = GAME.debug.makeAvatar(S.plan.me); outfit(S.me); S.me.A.gearId = S.me.weapon; S.me.A.root.visible = false; S.tpT = S.view === 'tp' ? 1 : 0; buildArms(S.plan.me); ARMS.id = null;
     if (S.fight){
       S.W = { fighters:[S.me], near, nav:nav(), groundAt:(x, z, y) => groundAt(x, z, y), rand:Math.random, now:0, onShot:botShot, intel:{} };
       for (let i = 0; i < 9; i++){
         const s = farSpot(), teamed = S.team || S.squad, team = teamed ? (i < 4 ? 0 : 1) : null, b = BOTS.newBot({ id:'b' + i, name:NAMES[i], x:s[0], z:s[1], weapon:S.br ? 'pistol' : ARMS_FOR[i], team, loadout:S.br ? ['pistol'] : undefined }, S.diff);
-        b.y = groundAt(s[0], s[1], 2); b.A = GAME.debug.makeAvatar(teamed ? (team === 0 ? 'tf' : 'zombie_tank') : CHAR_LIST[i % 4]); outfit(b); addBar(b, team === 0); S.bots.push(b); S.W.fighters.push(b);
+        b.y = groundAt(s[0], s[1], 2); b.A = GAME.debug.makeAvatar(teamed ? (team === 0 ? S.plan.mates[i] : S.plan.foes[i - 4]) : S.plan.others[i]); outfit(b); addBar(b, team === 0); S.bots.push(b); S.W.fighters.push(b);
       }
       S.targets = S.team || S.squad ? S.bots.filter(b => b.team === 1) : S.bots;
       if (S.team || S.squad) S.me.team = 0;
@@ -1123,7 +1178,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     document.body.classList.add('sh-on'); document.body.classList.toggle('sh-touch', TOUCH);
     el('#shHp').hidden = !S.fight; el('#shDead').hidden = true; el('#shFeed').innerHTML = ''; el('#shHurt').style.opacity = 0;
     if (!TOUCH) canvas.requestPointerLock?.()?.catch?.(() => {});
-    toast(TOUCH && !S.fight ? 'Drag FIRE to aim and shoot. Push the stick right up to sprint' : S.br ? 'Loot is on shop counters and down the alleys. Stay inside the blue wall' : S.team ? 'Your team is in blue. Drop all five on the other side' : S.fight ? 'First to 15 kills wins. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
+    toast(TOUCH && !S.fight ? 'Drag FIRE to aim and shoot. Push the stick right up to sprint' : S.br ? 'Loot is on shop counters and down the alleys. Stay inside the blue wall' : S.team ? 'Your team is in blue. Wipe out the other side' : S.fight ? 'First to 15 kills wins. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
   }
   function stop(){
     if (!S.active) return;
@@ -1191,7 +1246,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     const k = 1 - Math.exp(-dt * (P.onGround ? 11 : 2.5)); S.vx += (mx - S.vx) * k; S.vz += (mz - S.vz) * k;
     return S.climb ? [0, 0] : [S.vx, S.vz];
   }
-  return { start, stop, tick, render, S, setView, savedView, ARMS, GM, HOLD, vmScene, vmCam, rig, drawGunFor:drawGun, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, animBodyFor:animBody, fallFor:fall, tickFallFor:tickFall, momentum, noJump, setStance, mapDots, play, showTips, HELP, setHelp, loadGunModels, MODEL, regearFor:regear, preload:() => ready().catch(() => {}) };
+  return { start, stop, tick, render, S, setView, savedView, ARMS, GM, HOLD, vmScene, vmCam, rig, drawGunFor:drawGun, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, animBodyFor:animBody, fallFor:fall, tickFallFor:tickFall, momentum, noJump, setStance, mapDots, play, showTips, HELP, setHelp, loadGunModels, MODEL, regearFor:regear, preload, prep, ROSTER, TEAMS };
 })();
 window.SHOOTER = SHOOTER;
 { const wait = () => (window.__ready ? SHOOTER.loadGunModels() : setTimeout(wait, 300)); wait(); }
