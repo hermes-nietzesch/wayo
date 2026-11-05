@@ -13,8 +13,10 @@
     medium: { react:[0.45, 0.8],  err:0.1,  settle:1.0, sight:38, pause:[0.45, 1.0], burst:[3, 5], strafe:0.8, retreat:0.45 },
     hard:   { react:[0.25, 0.45], err:0.055, settle:0.7, sight:48, pause:[0.25, 0.6], burst:[4, 7], strafe:1, retreat:0.8 },
   };
-  const WALK = 3.4, RUN = 5.6, RADIUS = 0.36, EYE = 1.55, CHEST = 1.15;
-  const LIKES = { pistol:15, smg:13, rifle:24, shotgun:7 };
+  // speeds in metres a second. They match the walk and run animations, so feet stay planted instead of sliding.
+  const STRAFE = 2.0, JOG = 3.3, RUN = 4.8, RADIUS = 0.36, EYE = 1.55, CHEST = 1.15, PERSONAL = 1.5;
+  const LIKES = { pistol:15, smg:13, rifle:24, shotgun:7, sniper:42 };
+  const wrap = a => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
 
   /* ---------------- street map: a walkable grid and shortest routes through it */
   function makeNav(area, walkable, cell = 1.5) {
@@ -95,7 +97,7 @@
 
   function newBot(o, diff) {
     const b = R.newFighter(o); b.isBot = true; b.name = o.name; b.diff = DIFF[diff] || DIFF.medium; b.ry = 0; b.speed = 0; b.kills = 0; b.deaths = 0;
-    Object.assign(b, { state:'roam', route:[], think:Math.random() * 0.3, target:null, seenAt:0, reactAt:0, trackT:0, burst:0, pauseAt:0, strafeDir:1, strafeAt:0, lastX:b.x, lastZ:b.z, stuck:0, heard:null, holdAt:0, aimYaw:0, aimPitch:0, runTo:null });
+    Object.assign(b, { state:'roam', route:[], think:Math.random() * 0.3, target:null, seenAt:0, reactAt:0, trackT:0, burst:0, pauseAt:0, strafeDir:1, strafeAt:0, lastX:b.x, lastZ:b.z, stuck:0, heard:null, holdAt:0, aimYaw:0, aimPitch:0, runTo:null, vx:0, vz:0, wantX:0, wantZ:0, back:false });
     return b;
   }
   const rng = (r, [a, b]) => a + r() * (b - a);
@@ -143,19 +145,27 @@
     if (b.runTo && W.now > b.runTo) { b.runTo = null; if (b.state === 'retreat') b.state = t ? 'fight' : 'roam'; }
     if (b.state === 'roam') {
       if (b.heard && W.now - b.heard.t < 6) { routeTo(b, b.heard.x, b.heard.z, W); b.heard = null; b.state = 'chase'; b.chaseUntil = W.now + 8; }
-      else if (!b.route.length && W.now >= b.holdAt) { const s = W.nav.randomSpot(W.rand); routeTo(b, s[0], s[1], W); if (W.rand() < 0.25) b.holdAt = W.now + 0.8 + W.rand() * 1.6; }
+      else if (!b.route.length && W.now >= b.holdAt) {
+        // real players go looking for a fight: mostly head towards someone, sometimes just patrol
+        const foes = W.fighters.filter(f => f !== b && f.alive && (b.team === null || f.team !== b.team));
+        let s = W.nav.randomSpot(W.rand);
+        if (foes.length && W.rand() < 0.65) { const f = foes[Math.floor(W.rand() * foes.length)]; s = [f.x + (W.rand() - 0.5) * 16, f.z + (W.rand() - 0.5) * 16]; }
+        routeTo(b, s[0], s[1], W); if (W.rand() < 0.15) b.holdAt = W.now + 0.6 + W.rand() * 1.2;
+      }
     }
   }
+  function want(b, dx, dz, sp) { const d = Math.hypot(dx, dz) || 1; b.wantX = dx / d * sp; b.wantZ = dz / d * sp; }
   function walkRoute(b, sp, dt, W) {
     let n = b.route[0]; if (!n) return 0;
     let dx = n[0] - b.x, dz = n[1] - b.z, d = Math.hypot(dx, dz);
-    if (d < 0.6) { b.route.shift(); n = b.route[0]; if (!n) return 0; dx = n[0] - b.x; dz = n[1] - b.z; d = Math.hypot(dx, dz); }
-    const s = Math.min(sp * dt, d); slide(b, dx / d * s, dz / d * s, W.near); b.ry = Math.atan2(dx, dz); return sp;
+    if (d < 0.7) { b.route.shift(); n = b.route[0]; if (!n) return 0; dx = n[0] - b.x; dz = n[1] - b.z; }
+    want(b, dx, dz, sp); return sp;
   }
   function aimAndFire(b, dt, W) {
     const t = b.target; if (!t || !t.alive) return;
-    const o = [b.x, b.y + EYE, b.z], tx = t.x, ty = t.y + CHEST - 0.1, tz = t.z, dx = tx - o[0], dy = ty - o[1], dz = tz - o[2], hd = Math.hypot(dx, dz), want = Math.atan2(dx, dz);
-    b.ry = want; b.trackT += dt;
+    const o = [b.x, b.y + EYE, b.z], tx = t.x, ty = t.y + CHEST - 0.1, tz = t.z, dx = tx - o[0], dy = ty - o[1], dz = tz - o[2], hd = Math.hypot(dx, dz);
+    b.aimWant = Math.atan2(dx, dz); b.aimPitch = Math.atan2(dy, hd); b.trackT += dt;
+    if (Math.abs(wrap(b.aimWant - b.aimYaw)) > 0.3) return;   // still turning towards the target
     if (W.now < b.reactAt) return;
     const D = b.diff, w = R.WEAPONS[b.weapon];
     if (hd > (w.range || 60) || (w.pellets > 1 && hd > 22)) return;
@@ -164,7 +174,7 @@
     if (!sees(b, t, W)) return;
     // aim starts rough and settles while the bot tracks you; running targets are harder
     const settle = 0.3 + 0.7 * Math.exp(-b.trackT / D.settle), mv = t.speed || 0, err = D.err * settle * (1 + mv * 0.09);
-    const yaw = want + (W.rand() - 0.5) * 2 * err, pitch = Math.atan2(dy, hd) + (W.rand() - 0.5) * 1.4 * err, c = Math.cos(pitch);
+    const yaw = b.aimWant + (W.rand() - 0.5) * 2 * err, pitch = Math.atan2(dy, hd) + (W.rand() - 0.5) * 1.4 * err, c = Math.cos(pitch);
     const shot = R.fire(b, [Math.sin(yaw) * c, Math.sin(pitch), Math.cos(yaw) * c], { moving:b.speed > 0.5, running:false, ads:true }, W.now, W.rand);
     if (!shot) return;
     W.onShot(b, shot, o);
@@ -175,27 +185,51 @@
     if (!b.alive) return;
     R.tick(b, dt, W.now);
     if ((b.think -= dt) <= 0) { b.think = 0.18 + W.rand() * 0.1; think(b, W); }
-    let sp = 0;
+    let sp = 0; b.wantX = b.wantZ = 0; b.aimWant = null;
     if (b.state === 'fight' && b.target) {
       const t = b.target, dist = Math.hypot(t.x - b.x, t.z - b.z), like = LIKES[b.weapon] || 15;
-      if (dist > like * 1.3) { if (!b.route.length || W.now > (b.repathAt || 0)) { routeTo(b, t.x, t.z, W); b.repathAt = W.now + 0.8; } sp = walkRoute(b, RUN * 0.85, dt, W); }
+      if (dist > like * 1.3) { if (!b.route.length || W.now > (b.repathAt || 0)) { routeTo(b, t.x, t.z, W); b.repathAt = W.now + 0.8; } sp = walkRoute(b, RUN, dt, W); }
       else {
-        if (W.now > b.strafeAt) { b.strafing = W.rand() < b.diff.strafe; b.strafeDir = W.rand() < 0.5 ? -1 : 1; b.strafeAt = W.now + 0.6 + W.rand() * 1.1; }
+        if (W.now > b.strafeAt) { b.strafing = W.rand() < b.diff.strafe; b.strafeDir = W.rand() < 0.5 ? -1 : 1; b.strafeAt = W.now + 0.9 + W.rand() * 1.4; }
         if (b.strafing) {
-        const l = dist || 1, back = dist < like * 0.5 ? -0.6 : 0, nx = (t.x - b.x) / l, nz = (t.z - b.z) / l;
-        const mx = -nz * b.strafeDir + nx * back, mz = nx * b.strafeDir + nz * back, nextX = b.x + mx * 1.2, nextZ = b.z + mz * 1.2;
-        if (W.nav.isOpen(nextX, nextZ)) { slide(b, mx * WALK * dt, mz * WALK * dt, W.near); sp = WALK; } else b.strafeDir *= -1;
+          const l = dist || 1, back = dist < like * 0.5 ? -0.7 : 0, nx = (t.x - b.x) / l, nz = (t.z - b.z) / l, mx = -nz * b.strafeDir + nx * back, mz = nx * b.strafeDir + nz * back;
+          if (W.nav.isOpen(b.x + mx * 1.4, b.z + mz * 1.4)) { want(b, mx, mz, STRAFE); sp = STRAFE; } else b.strafeDir *= -1;
         }
       }
       aimAndFire(b, dt, W);
     } else if (b.state === 'retreat') sp = walkRoute(b, RUN, dt, W);
-    else if (b.state === 'chase') sp = walkRoute(b, RUN * 0.85, dt, W);
-    else sp = walkRoute(b, WALK, dt, W);
+    else if (b.state === 'chase') sp = walkRoute(b, RUN, dt, W);
+    else sp = walkRoute(b, JOG, dt, W);
+    // keep a person's distance from everyone else instead of walking through them
+    let wx = b.wantX, wz = b.wantZ;
+    for (const o of W.fighters) {
+      if (o === b || !o.alive) continue;
+      const dx = b.x - o.x, dz = b.z - o.z, d = Math.hypot(dx, dz);
+      if (d < PERSONAL && d > 1e-3 && Math.abs((o.y || 0) - b.y) < 1.5) { const p = (PERSONAL - d) / PERSONAL * 4.5; wx += dx / d * p; wz += dz / d * p; }
+    }
+    // people speed up and slow down, they don't start and stop instantly
+    const k = 1 - Math.exp(-dt * 9); b.vx += (wx - b.vx) * k; b.vz += (wz - b.vz) * k;
+    const lim = Math.hypot(b.vx, b.vz); if (lim > RUN * 1.05) { b.vx *= RUN * 1.05 / lim; b.vz *= RUN * 1.05 / lim; }
+    slide(b, b.vx * dt, b.vz * dt, W.near);
+    for (const o of W.fighters) {
+      if (o === b || !o.alive) continue;
+      const dx = b.x - o.x, dz = b.z - o.z, d = Math.hypot(dx, dz);
+      if (d < 0.7 && d > 1e-3 && Math.abs((o.y || 0) - b.y) < 1.5) slide(b, dx / d * (0.7 - d), dz / d * (0.7 - d), W.near);
+    }
     b.y = W.groundAt(b.x, b.z, b.y + 0.6);
+    const speed = Math.hypot(b.vx, b.vz); b.speed = speed;
+    // legs face the way the bot is moving, the upper body keeps facing the fight
+    const aiming = b.aimWant != null;
+    let legs = b.ry; b.back = false;
+    if (speed > 0.35) {
+      legs = Math.atan2(b.vx, b.vz);
+      if (aiming && Math.abs(wrap(legs - b.aimYaw)) > 1.95) { legs = wrap(legs + Math.PI); b.back = true; }
+    } else if (aiming) legs = b.aimWant;
+    b.ry = wrap(b.ry + wrap(legs - b.ry) * Math.min(1, dt * 10));
+    const look = aiming ? b.aimWant : b.ry; b.aimYaw = wrap(b.aimYaw + wrap(look - b.aimYaw) * Math.min(1, dt * 11)); if (!aiming) b.aimPitch *= 0.9;
     // stuck on something: drop the route and let the next thought find a new one
     const moved = Math.hypot(b.x - b.lastX, b.z - b.lastZ); b.lastX = b.x; b.lastZ = b.z;
     if (sp > 0 && moved < sp * dt * 0.25) { b.stuck += dt; if (b.stuck > 0.7) { b.stuck = 0; b.route = []; b.holdAt = 0; const s = W.nav.snap(b.x, b.z), c = W.nav.centre(s); slide(b, (c[0] - b.x) * 0.3, (c[1] - b.z) * 0.3, W.near); } } else b.stuck = Math.max(0, b.stuck - dt);
-    b.speed = sp;
   }
   // bots react to gunfire they can hear
   function hearShot(bots, x, z, shooter, W) {
@@ -203,7 +237,7 @@
   }
   function respawn(b, spot, W) {
     const fresh = R.newFighter({ id:b.id, weapon:b.weapon, team:b.team });
-    Object.assign(b, { ammo:fresh.ammo, hp:b.maxHp, alive:true, reloadAt:0, nextFire:0, bloom:0, x:spot[0], z:spot[1], y:W.groundAt(spot[0], spot[1], 2), state:'roam', route:[], target:null, runTo:null, lastSeen:null, burst:0, heard:null, lastX:spot[0], lastZ:spot[1] });
+    Object.assign(b, { ammo:fresh.ammo, hp:b.maxHp, alive:true, reloadAt:0, nextFire:0, bloom:0, x:spot[0], z:spot[1], y:W.groundAt(spot[0], spot[1], 2), state:'roam', route:[], target:null, runTo:null, lastSeen:null, burst:0, heard:null, lastX:spot[0], lastZ:spot[1], vx:0, vz:0, speed:0, back:false });
   }
   return { DIFF, makeNav, newBot, step, hearShot, respawn, sees, RADIUS };
 });

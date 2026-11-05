@@ -1581,7 +1581,8 @@ function updateInner(dt){
   P.yaw -= look.dx; P.pitch = Math.max(-1.45, Math.min(1.45, P.pitch - look.dy)); look.dx = look.dy = 0;
   if (P.frozen){ fx = fz = 0; }
   const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
-  const mx = (fx * cy - fz * sy) * sp, mz = (-fx * sy - fz * cy) * sp;
+  let mx = (fx * cy - fz * sy) * sp, mz = (-fx * sy - fz * cy) * sp;
+  if (window.SHOOTER && SHOOTER.S.active) [mx, mz] = SHOOTER.momentum(mx, mz, dt);
   if (P.fly){
     const fs = sp * 2.2; P.x += mx / sp * fs * dt; P.z += mz / sp * fs * dt;
     if (keys.Space) P.y += fs * dt; if (keys.KeyC) P.y = Math.max(0, P.y - fs * dt);

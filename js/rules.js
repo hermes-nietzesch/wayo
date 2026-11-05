@@ -17,9 +17,11 @@
       nearM:30, farM:80, farMul:0.65, hip:0.026, ads:0.0035, bloom:0.004, bloomMax:0.04, kick:0.0105, moveMul:0.93, zoom:46 },
     shotgun:{ name:'Shotgun', slot:4, auto:false, dmg:11, headMul:1.5, cd:0.85, mag:6, reserve:30, reload:2.4, pellets:9, range:45,
       nearM:7, farM:20, farMul:0.3, hip:0.05, ads:0.038, bloom:0, bloomMax:0, kick:0.05, moveMul:0.92, zoom:60 },
-    knife:  { name:'Knife', slot:5, melee:true, auto:true, dmg:45, headMul:1.5, cd:0.5, reach:2.3, kick:0, moveMul:1.08, hip:0, ads:0, bloom:0, bloomMax:0 },
+    sniper: { name:'Sniper', slot:5, auto:false, scope:true, dmg:85, headMul:2.5, cd:1.35, mag:5, reserve:25, reload:2.6, pellets:1, range:240,
+      nearM:60, farM:170, farMul:0.8, hip:0.085, ads:0.0004, bloom:0, bloomMax:0, kick:0.038, moveMul:0.9, zoom:14 },
+    knife:  { name:'Knife', slot:6, melee:true, auto:true, dmg:45, headMul:1.5, cd:0.5, reach:2.3, kick:0, moveMul:1.08, hip:0, ads:0, bloom:0, bloomMax:0 },
   };
-  const ORDER = ['pistol', 'smg', 'rifle', 'shotgun', 'knife'];
+  const ORDER = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'knife'];
   const SWAP_TIME = 0.32, BLOOM_DECAY = 0.07;
   const MOVE_SPREAD = 0.012, RUN_SPREAD = 0.03, AIR_SPREAD = 0.05;
   const PLAYER = { hp:100, radius:0.3, bodyTop:1.42, headTop:1.78 };
