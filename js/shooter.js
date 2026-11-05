@@ -58,14 +58,35 @@ const SHOOTER = (() => {
     for (const p of FX.puff){ if (p.life <= 0) continue; p.life -= dt * 3; p.m.scale.setScalar(0.12 + (1 - p.life) * 0.5); p.m.position.y += dt * 0.5; p.m.material.opacity = Math.max(0, p.life) * 0.9; if (p.life <= 0) p.m.visible = false; }
   }
 
-  /* ---------------- sound: made in the browser for now, real recordings can replace these later */
+  /* ---------------- sound: real recorded gunshots from audio/guns, with small changes so repeat shots differ.
+     The knife, clicks and reload noises are still made in the browser. */
   let AC = null;
   function audio(){ if (!AC){ try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (AC && AC.state === 'suspended') AC.resume(); return AC; }
   function noise(dur){ const b = AC.createBuffer(1, Math.max(1, AC.sampleRate * dur), AC.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length); return b; }
   function blast(vol, dur, freq, q = 0.8){ const A = audio(); if (!A) return; const s = A.createBufferSource(), f = A.createBiquadFilter(), g = A.createGain(), t = A.currentTime; s.buffer = noise(dur); f.type = 'lowpass'; f.frequency.setValueAtTime(freq, t); f.frequency.exponentialRampToValueAtTime(Math.max(80, freq * 0.15), t + dur); f.Q.value = q; g.gain.value = vol; s.connect(f).connect(g).connect(A.destination); s.start(t); }
   function thump(vol, f0, dur){ const A = audio(); if (!A) return; const o = A.createOscillator(), g = A.createGain(), t = A.currentTime; o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(40, t + dur); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.connect(g).connect(A.destination); o.start(t); o.stop(t + dur); }
   const BANG = { pistol:[0.55, 0.16, 4200, 160], smg:[0.42, 0.1, 5200, 190], rifle:[0.6, 0.2, 3600, 130], shotgun:[0.85, 0.32, 2400, 95] };
-  function bang(id){ const b = BANG[id]; if (b){ blast(b[0], b[1], b[2]); thump(b[0] * 0.8, b[3], b[1] * 1.2); } else blast(0.12, 0.12, 2800, 2); }
+  const SHOTS = { pistol:{ n:2, gain:0.85 }, smg:{ n:5, gain:0.72 }, rifle:{ n:4, gain:0.9 }, shotgun:{ n:4, gain:1 } };
+  const BUF = {}, lastTake = {}; let limiter = null, soundsLoading = false;
+  function loadShots(){
+    const A = audio(); if (!A || soundsLoading) return; soundsLoading = true;
+    limiter = A.createDynamicsCompressor(); limiter.threshold.value = -6; limiter.ratio.value = 12; limiter.attack.value = 0.002; limiter.release.value = 0.12; limiter.connect(A.destination);
+    for (const id in SHOTS){
+      BUF[id] = [];
+      for (let i = 1; i <= SHOTS[id].n; i++) fetch(`audio/guns/${id}${i}.mp3`).then(r => r.arrayBuffer()).then(b => A.decodeAudioData(b)).then(d => BUF[id].push(d)).catch(() => {});
+    }
+  }
+  // dist is in metres: far shots get quieter and lose their top end, ready for bots firing across the market
+  function bang(id, dist = 0){
+    const list = BUF[id], A = AC;
+    if (!list || !list.length || !A){ const b = BANG[id]; if (b){ blast(b[0], b[1], b[2]); thump(b[0] * 0.8, b[3], b[1] * 1.2); } else blast(0.12, 0.12, 2800, 2); return; }
+    let k = Math.floor(Math.random() * list.length); if (list.length > 1 && k === lastTake[id]) k = (k + 1) % list.length; lastTake[id] = k;
+    const src = A.createBufferSource(), g = A.createGain(), lp = A.createBiquadFilter();
+    src.buffer = list[k]; src.playbackRate.value = 0.97 + Math.random() * 0.06;
+    lp.type = 'lowpass'; lp.frequency.value = dist > 0 ? Math.max(900, 14000 / (1 + dist / 12)) : 20000;
+    g.gain.value = SHOTS[id].gain * (0.92 + Math.random() * 0.08) / (1 + dist / 14);
+    src.connect(lp).connect(g).connect(limiter); src.start();
+  }
   const click = (v = 0.18, f = 3000) => blast(v, 0.03, f, 3);
 
   /* ---------------- on-screen display */
@@ -247,7 +268,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   const STAND = { WALK, RUN, fov:camera.fov };
   function start(){
     if (S.active || !GAME.S.ready) return;
-    buildHud(); makeFx(); audio();
+    buildHud(); makeFx(); audio(); loadShots();
     const spots = streetSpots(), s = spots[Math.floor(spots.length / 2)];
     P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); P.vy = 0; P.yaw = 0; P.pitch = 0; P.fly = false; P.frozen = false;
     S.me = R.newFighter({ weapon:'rifle' }); S.stats = { shots:0, hits:0, heads:0, kills:0 }; S.now = 0; S.ads = false; S.adsT = 0; S.trigger = false; S.pressed = false; S.targets = [];
@@ -300,6 +321,6 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   });
   addEventListener('wheel', e => { if (!S.active || document.pointerLockElement !== canvas) return; const i = R.ORDER.indexOf(S.me.weapon), n = R.ORDER.length; swap(R.ORDER[(i + (e.deltaY > 0 ? 1 : n - 1)) % n]); }, { passive:true });
   document.addEventListener('pointerlockchange', () => { if (S.active && !TOUCH && !window.__TEST) setPaused(document.pointerLockElement !== canvas); });
-  return { start, stop, tick, render, S, setTrigger, swap, reload };
+  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF };
 })();
 window.SHOOTER = SHOOTER;
