@@ -121,11 +121,11 @@
   }
   /* the zone: wait, shrink towards the next circle, repeat. Hurts more every phase. */
   const ZONE_PHASES = [
-    { wait:45, shrink:35, r:66, dps:2 }, { wait:35, shrink:30, r:43, dps:3 }, { wait:30, shrink:25, r:27, dps:5 },
-    { wait:25, shrink:20, r:15, dps:8 }, { wait:20, shrink:20, r:4, dps:12 },
+    { wait:45, shrink:35, r:66, dps:3 }, { wait:35, shrink:30, r:43, dps:4 }, { wait:30, shrink:25, r:27, dps:6 },
+    { wait:25, shrink:20, r:15, dps:9 }, { wait:20, shrink:20, r:4, dps:14 },
   ];
   function makeZone(cx, cz, r, nextCentre) {
-    const z = { cx, cz, r, phase:0, shrinking:false, dps:1, done:false, nextCentre, sx:cx, sz:cz, sr:r };
+    const z = { cx, cz, r, phase:0, shrinking:false, dps:3, done:false, nextCentre, sx:cx, sz:cz, sr:r };
     const p = ZONE_PHASES[0], c = nextCentre(cx, cz, r, p.r); z.nx = c[0]; z.nz = c[1]; z.nr = p.r; z.t = p.wait; return z;
   }
   function zoneTick(z, dt) {

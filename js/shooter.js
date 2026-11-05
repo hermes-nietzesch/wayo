@@ -419,10 +419,10 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
       if (hit.t < w.range && d0 < 60) impact(x, y, z, o, !!hit.target);
       if (hit.target) hits.set(hit.target, (hits.get(hit.target) || 0) + R.damageAt(shot.weapon, hit.t, hit.zone));
     });
-    for (const [T, dmg] of hits){ const res = R.applyDamage(T, T === S.me ? dmg : dmg * (S.W.botVsBot || 1)); T.lastHitBy = b; T.lastHitAt = S.now; if (T === S.me) hurtMe(res.dealt, b); if (res.killed) downed(T, b); }
+    for (const [T, dmg] of hits){ const res = R.applyDamage(T, dmg); T.lastHitBy = b; T.lastHitAt = S.now; if (T === S.me) hurtMe(res.dealt, b); if (res.killed) downed(T, b); }
   }
   function hurtMe(dmg, from){
-    S.hurtT = 0.45; const a = Math.atan2(from.x - S.me.x, from.z - S.me.z); S.hurtFrom = a; blast(0.3, 0.09, 700, 1); thump(0.3, 130, 0.12);
+    S.hurtT = 0.45; S.hurtFrom = Math.atan2(from.x - S.me.x, from.z - S.me.z); blast(0.3, 0.09, 700, 1); thump(0.3, 130, 0.12);
   }
   function feed(html){ const d = document.createElement('div'); d.innerHTML = html; const f = el('#shFeed'); f.appendChild(d); while (f.children.length > 4) f.firstChild.remove(); setTimeout(() => d.remove(), 5000); }
   function downed(T, by){
@@ -469,12 +469,36 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     for (let i = 0; i < n * 60 && out.length < n; i++){ const p = N.randomSpot(Math.random); if (out.every(q => Math.hypot(p[0] - q[0], p[1] - q[1]) >= gap)) out.push(p); }
     return out;
   }
+  // shop counters you can reach from the street
+  function counterSpots(){
+    const out = [], N = nav();
+    for (const b of LAYOUT.buildings){
+      if (!b.play || b.kind !== 'shop') continue;
+      const F = frame(b.cx, b.cz, b.ry), bays = Math.max(1, Math.round(b.w / 3.7)), bw = b.w / bays, zf = -b.d / 2;
+      for (let k = 0; k < bays; k++){
+        const lx = -b.w / 2 + (k + 0.5) * bw - 0.35, p = W_(F, lx, zf + 0.78), g = groundAt(p[0], p[1], 2);
+        if (Math.abs(g - 1.05) > 0.08) continue;              // no counter in this bay
+        const a = W_(F, lx, zf - 0.95); if (!N.isOpen(a[0], a[1])) continue;
+        out.push({ x:p[0], z:p[1], y:g + 0.3, ax:a[0], az:a[1] });
+      }
+    }
+    return out;
+  }
+  // alleys and gaps between building blocks, away from the open streets
+  function alleySpots(){
+    const N = nav(), out = [];
+    const onStreet = (x, z) => LAYOUT.streets.some(st => st.pts.some((p, k) => k && segDist(x, z, st.pts[k - 1], p) < st.w / 2 + st.band + 1.5));
+    for (const k of N.cells){ const p = N.centre(k); if (!onStreet(p[0], p[1])) out.push({ x:p[0], z:p[1], y:groundAt(p[0], p[1], 2) + 0.55, ax:p[0], az:p[1] }); }
+    return out;
+  }
   function placeLoot(){
     const list = []; for (const [kind, weapon, n] of LOOT) for (let i = 0; i < n; i++) list.push({ kind, weapon });
-    const spots = spreadSpots(list.length, 5);
-    list.sort(() => Math.random() - 0.5).forEach((it, i) => { const s = spots[i % spots.length]; it.x = s[0] + (i >= spots.length ? 1 : 0); it.z = s[1]; it.y = groundAt(it.x, it.z, 2) + 0.55; });
+    const shuffle = a => a.sort(() => Math.random() - 0.5), used = [], take = (pool, want, gap) => { for (const s of shuffle(pool)){ if (used.length >= want) break; if (used.every(u => Math.hypot(u.x - s.x, u.z - s.z) >= gap)) used.push(s); } };
+    take(counterSpots(), Math.ceil(list.length * 0.6), 4); take(alleySpots(), list.length, 4); take([...counterSpots(), ...alleySpots()], list.length, 1.5);
+    S.lootSpots = used.length;
+    shuffle(list).forEach((it, i) => { const s = used[i % used.length]; Object.assign(it, s); });
     // the best sniper spots: two rifles waiting on rooftops, ladders only
-    S.ladders.slice(0, 3).forEach((L, i) => list.push({ kind:'gun', weapon:'sniper', x:L.inX, z:L.inZ, y:L.top + 0.55 }));
+    S.ladders.slice(0, 3).forEach((L, i) => list.push({ kind:'gun', weapon:'sniper', x:L.inX, z:L.inZ, y:L.top + 0.55, roof:true }));
     for (const it of list){ it.m = itemMesh(it); it.m.position.set(it.x, it.y, it.z); it.m.userData.ph = Math.random() * 6; scene.add(it.m); }
     S.items = list;
   }
@@ -491,7 +515,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     for (const it of S.items){
       if (it.gone) continue;
       it.m.rotation.y += dt * 1.2; it.m.position.y = it.y + Math.sin(t * 2 + it.m.userData.ph) * 0.06;
-      if (f.alive && Math.hypot(it.x - P.x, it.z - P.z) < 1.2 && Math.abs(it.y - 0.55 - P.y) < 1.2 && R.takeItem(f, it)) itemTaken(it, f);
+      if (f.alive && Math.hypot(it.x - P.x, it.z - P.z) < 1.5 && Math.abs(it.y - 0.55 - P.y) < 1.2 && R.takeItem(f, it)) itemTaken(it, f);
     }
     if (S.hintT > 0){ S.hintT -= dt; if (S.hintT <= 0) el('#shHint').hidden = true; }
   }
@@ -523,16 +547,15 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     // bots start cautious and turn more aggressive as the zone squeezes everyone together
     S.W.sightMul = [0.45, 0.6, 0.75, 0.9, 1, 1][Z.phase]; S.W.hunt = [0.05, 0.12, 0.25, 0.45, 0.7, 0.9][Z.phase];
     // pacing: in a map this small bots would finish each other in a minute, so they only thin out as fast as the zone closes
-    const alive = S.W.fighters.filter(f => f.alive).length, keep = [8, 6, 4, 3, 2, 1][Z.phase];
-    S.W.botVsBot = alive <= keep ? 0.02 : [0.14, 0.2, 0.3, 0.5, 0.8, 1][Z.phase];
+    const alive = S.W.fighters.filter(f => f.alive).length, keep = [8, 6, 4, 3, 2, 1][Z.phase]; S.W.truce = alive <= keep;
     if (B.endIn > 0){ B.endIn -= dt; if (B.endIn <= 0){ finishBR(); return; } }
     B.wall.position.set(Z.cx, 28, Z.cz); B.wall.scale.set(Z.r, 1, Z.r);
     const outside = S.me.alive && !R.inZone(Z, P.x, P.z);
     el('#shZoneWarn').hidden = !outside; el('#shBurn').style.opacity = outside ? 0.8 : 0;
-    B.tick -= dt;
-    if (B.tick <= 0 && B.freeze <= 0){
-      B.tick = 1;
-      for (const f of S.W.fighters){ if (!f.alive || R.inZone(Z, f.x, f.z)) continue; if (R.burn(f, Z.dps)) downed(f, null); else if (f === S.me) blast(0.14, 0.08, 500, 1); }
+    // outside the zone your health drains steadily until you get back in, and it drains faster every phase
+    if (B.freeze <= 0){
+      for (const f of S.W.fighters){ if (!f.alive || R.inZone(Z, f.x, f.z)) continue; if (R.burn(f, Z.dps * dt)) downed(f, null); }
+      B.tick -= dt; if (outside && B.tick <= 0){ B.tick = 0.9; blast(0.14, 0.08, 500, 1); S.hurtFrom = null; }
     }
   }
   function checkBR(){
@@ -765,7 +788,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     document.body.classList.add('sh-on'); document.body.classList.toggle('sh-touch', TOUCH);
     el('#shHp').hidden = S.mode !== 'bots'; el('#shDead').hidden = true; el('#shFeed').innerHTML = ''; el('#shHurt').style.opacity = 0;
     if (!TOUCH) canvas.requestPointerLock?.()?.catch?.(() => {});
-    toast(S.br ? 'Walk over weapons, armour and medkits to grab them. Stay inside the blue wall' : S.team ? 'Your team is in blue. Drop all five Traders' : S.fight ? 'Nine bots dey hunt you. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
+    toast(S.br ? 'Loot is on shop counters and down the alleys. Stay inside the blue wall' : S.team ? 'Your team is in blue. Drop all five Traders' : S.fight ? 'Nine bots dey hunt you. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
   }
   function stop(){
     if (!S.active) return;

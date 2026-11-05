@@ -114,6 +114,8 @@
     const fx = Math.sin(b.ry), fz = Math.cos(b.ry);
     for (const t of W.fighters) {
       if (t === b || !t.alive || (b.team !== null && b.team === t.team)) continue;
+      // when the match is thinning out too fast bots leave each other alone, though they still answer if shot
+      if (W.truce && t.isBot && !(b.lastHitBy === t && W.now - b.lastHitAt < 3)) continue;
       const dx = t.x - b.x, dz = t.z - b.z, d = Math.hypot(dx, dz);
       const wasHit = b.lastHitBy === t && W.now - b.lastHitAt < 2.5;
       if (d > b.diff.sight * (W.sightMul || 1) * (wasHit ? 1 : [1, 0.8, 0.55][t.stance || 0])) continue;   // low targets are harder to spot
@@ -145,7 +147,7 @@
   }
   function nearestLoot(b, W) {
     let best = null, bd = 34;
-    for (const it of W.items) { if (it.gone || it.y > 1 || !wants(b, it)) continue; const d = Math.hypot(it.x - b.x, it.z - b.z); if (d < bd) { bd = d; best = it; } }
+    for (const it of W.items) { if (it.gone || it.roof || !wants(b, it)) continue; const d = Math.hypot(it.ax - b.x, it.az - b.z); if (d < bd) { bd = d; best = it; } }
     return best;
   }
   function think(b, W) {
@@ -175,7 +177,7 @@
     if (b.state === 'loot' && (!b.lootItem || b.lootItem.gone || !b.route.length)) { b.state = 'roam'; b.lootItem = null; b.route = []; }
     if (b.state === 'roam' && W.items) {
       const it = nearestLoot(b, W);
-      if (it) { b.lootItem = it; routeTo(b, it.x, it.z, W); b.state = 'loot'; }
+      if (it) { b.lootItem = it; routeTo(b, it.ax, it.az, W); b.state = 'loot'; }
     }
     if (b.state === 'roam') {
       const call = b.team !== null && W.intel && W.intel[b.team];
@@ -221,7 +223,7 @@
     if (!b.alive) return;
     R.tick(b, dt, W.now);
     if (W.items) {
-      for (const it of W.items) if (!it.gone && it.y < 1 && Math.hypot(it.x - b.x, it.z - b.z) < 1.3 && R.takeItem(b, it)) W.onItem(it, b);
+      for (const it of W.items) if (!it.gone && !it.roof && Math.hypot(it.ax - b.x, it.az - b.z) < 1.5 && R.takeItem(b, it)) W.onItem(it, b);
       const top = R.bestGun(b), a = b.ammo[b.weapon];
       if (!top) b.ammo.pistol.reserve = 12;                       // never left totally helpless
       else if (top !== b.weapon && (R.BEST.indexOf(top) < R.BEST.indexOf(b.weapon) || a.mag + a.reserve === 0) && !R.reloading(b, W.now)) b.weapon = top;
