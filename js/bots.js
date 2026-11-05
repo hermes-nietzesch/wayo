@@ -1,0 +1,209 @@
+/* =====================================================================
+   Wayo bots: how they find their way and how they fight.
+   Like rules.js, this knows nothing about three.js or the screen, so it can
+   run on a game server later. Tune how good bots are in the DIFF table.
+   ===================================================================== */
+(function (root, make) {
+  if (typeof module === 'object' && module.exports) module.exports = make(require('./rules.js'));
+  else root.WAYO_BOTS = make(root.WAYO_RULES);
+})(typeof self !== 'undefined' ? self : this, function (R) {
+  const DIFF = {
+    //        reaction time, aim error (radians), seconds to settle aim, sight, pause between bursts
+    easy:   { react:[0.75, 1.2],  err:0.16, settle:1.5, sight:30, pause:[0.8, 1.5], burst:[2, 3], strafe:0.55, retreat:0.1 },
+    medium: { react:[0.45, 0.8],  err:0.1,  settle:1.0, sight:38, pause:[0.45, 1.0], burst:[3, 5], strafe:0.8, retreat:0.45 },
+    hard:   { react:[0.25, 0.45], err:0.055, settle:0.7, sight:48, pause:[0.25, 0.6], burst:[4, 7], strafe:1, retreat:0.8 },
+  };
+  const WALK = 3.4, RUN = 5.6, RADIUS = 0.36, EYE = 1.55, CHEST = 1.15;
+  const LIKES = { pistol:15, smg:13, rifle:24, shotgun:7 };
+
+  /* ---------------- street map: a walkable grid and shortest routes through it */
+  function makeNav(area, walkable, cell = 1.5) {
+    const x0 = area[0], z0 = area[1], w = Math.ceil((area[2] - x0) / cell), h = Math.ceil((area[3] - z0) / cell);
+    const open = new Uint8Array(w * h), I = (i, j) => i + j * w;
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) open[I(i, j)] = walkable(x0 + (i + 0.5) * cell, z0 + (j + 0.5) * cell) ? 1 : 0;
+    // keep only the largest connected area, so nobody is sent somewhere they can't reach
+    const label = new Int32Array(w * h), sizes = [0]; let best = 0;
+    for (let s = 0; s < open.length; s++) {
+      if (!open[s] || label[s]) continue;
+      const id = sizes.length; let n = 0, st = [s]; label[s] = id;
+      while (st.length) { const c = st.pop(); n++; const i = c % w, j = (c - i) / w;
+        for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const p = i + a, q = j + b; if (p < 0 || q < 0 || p >= w || q >= h) continue; const k = I(p, q); if (open[k] && !label[k]) { label[k] = id; st.push(k); } } }
+      sizes.push(n); if (n > (sizes[best] || 0)) best = id;
+    }
+    const cells = [];
+    for (let k = 0; k < open.length; k++) { open[k] = label[k] === best ? 1 : 0; if (open[k]) cells.push(k); }
+    const centre = k => { const i = k % w; return [x0 + (i + 0.5) * cell, z0 + ((k - i) / w + 0.5) * cell]; };
+    const cellAt = (x, z) => { const i = Math.floor((x - x0) / cell), j = Math.floor((z - z0) / cell); return i >= 0 && j >= 0 && i < w && j < h ? I(i, j) : -1; };
+    function snap(x, z) {
+      const c = cellAt(x, z); if (c >= 0 && open[c]) return c;
+      const i0 = Math.floor((x - x0) / cell), j0 = Math.floor((z - z0) / cell);
+      for (let r = 1; r < 14; r++) for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) {
+        if (Math.max(Math.abs(a), Math.abs(b)) !== r) continue;
+        const p = i0 + a, q = j0 + b; if (p < 0 || q < 0 || p >= w || q >= h) continue; if (open[I(p, q)]) return I(p, q);
+      }
+      return cells[0];
+    }
+    const g = new Float32Array(w * h), from = new Int32Array(w * h), seen = new Int32Array(w * h); let stamp = 0;
+    // a straight walk between two cells that stays on open ground
+    function clear(a, b) {
+      const [ax, az] = centre(a), [bx, bz] = centre(b), d = Math.hypot(bx - ax, bz - az), n = Math.ceil(d / (cell * 0.5));
+      for (let s = 1; s < n; s++) { const t = s / n, k = cellAt(ax + (bx - ax) * t, az + (bz - az) * t); if (k < 0 || !open[k]) return false; }
+      return true;
+    }
+    function path(ax, az, bx, bz) {
+      const S = snap(ax, az), T = snap(bx, bz); stamp++;
+      const tx = T % w, ty = (T - tx) / w, H = k => { const i = k % w, j = (k - i) / w, dx = Math.abs(i - tx), dy = Math.abs(j - ty); return dx + dy - 0.59 * Math.min(dx, dy); };
+      const heap = [[H(S), S]]; g[S] = 0; seen[S] = stamp; from[S] = -1;
+      const push = n => { heap.push(n); let c = heap.length - 1; while (c > 0) { const p = (c - 1) >> 1; if (heap[p][0] <= heap[c][0]) break; [heap[p], heap[c]] = [heap[c], heap[p]]; c = p; } };
+      const pop = () => { const t = heap[0], l = heap.pop(); if (heap.length) { heap[0] = l; let c = 0; for (;;) { let m = c, a = 2 * c + 1, b = a + 1; if (a < heap.length && heap[a][0] < heap[m][0]) m = a; if (b < heap.length && heap[b][0] < heap[m][0]) m = b; if (m === c) break; [heap[m], heap[c]] = [heap[c], heap[m]]; c = m; } } return t; };
+      let found = false;
+      while (heap.length) {
+        const [f, c] = pop(); if (c === T) { found = true; break; }
+        if (f > g[c] + H(c) + 1e-3) continue;
+        const i = c % w, j = (c - i) / w;
+        for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+          if (!a && !b) continue; const p = i + a, q = j + b; if (p < 0 || q < 0 || p >= w || q >= h) continue;
+          const k = I(p, q); if (!open[k]) continue;
+          if (a && b && (!open[I(i + a, j)] || !open[I(i, j + b)])) continue;   // no cutting corners
+          const ng = g[c] + (a && b ? 1.41 : 1);
+          if (seen[k] === stamp && ng >= g[k]) continue;
+          seen[k] = stamp; g[k] = ng; from[k] = c; push([ng + H(k), k]);
+        }
+      }
+      if (!found) return [];
+      const raw = []; for (let c = T; c >= 0; c = from[c]) raw.push(c); raw.reverse();
+      const out = []; let a = 0;       // pull the zig-zag grid route into straight lines
+      while (a < raw.length - 1) { let b = raw.length - 1; while (b > a + 1 && !clear(raw[a], raw[b])) b--; out.push(centre(raw[b])); a = b; }
+      return out;
+    }
+    return { path, snap, centre, cells, cellAt, isOpen:(x, z) => { const c = cellAt(x, z); return c >= 0 && !!open[c]; }, randomSpot:rand => centre(cells[Math.floor(rand() * cells.length)]) };
+  }
+
+  /* ---------------- moving: slide along walls exactly like a player does */
+  function slide(b, dx, dz, near) {
+    b.x += dx; b.z += dz;
+    for (const C of near(b.x, b.z)) {
+      if (C.ramp || C.y1 < 0.45 || C.y0 > 1.6) continue;
+      const rx = b.x - C.cx, rz = b.z - C.cz, lx = rx * C.c - rz * C.s, lz = rx * C.s + rz * C.c;
+      const cx = Math.max(-C.hw, Math.min(C.hw, lx)), cz = Math.max(-C.hd, Math.min(C.hd, lz));
+      let ax = lx - cx, az = lz - cz; const d2 = ax * ax + az * az;
+      if (d2 >= RADIUS * RADIUS) continue;
+      const d = Math.sqrt(d2) || 1e-3, push = RADIUS - d; if (d2 < 1e-8) { ax = 1; az = 0; }
+      const px = ax / d * push, pz = az / d * push; b.x += px * C.c + pz * C.s; b.z += -px * C.s + pz * C.c;
+    }
+  }
+
+  function newBot(o, diff) {
+    const b = R.newFighter(o); b.isBot = true; b.name = o.name; b.diff = DIFF[diff] || DIFF.medium; b.ry = 0; b.speed = 0; b.kills = 0; b.deaths = 0;
+    Object.assign(b, { state:'roam', route:[], think:Math.random() * 0.3, target:null, seenAt:0, reactAt:0, trackT:0, burst:0, pauseAt:0, strafeDir:1, strafeAt:0, lastX:b.x, lastZ:b.z, stuck:0, heard:null, holdAt:0, aimYaw:0, aimPitch:0, runTo:null });
+    return b;
+  }
+  const rng = (r, [a, b]) => a + r() * (b - a);
+  function sees(b, t, W) {
+    const o = [b.x, b.y + EYE, b.z], dx = t.x - o[0], dy = t.y + CHEST - o[1], dz = t.z - o[2], l = Math.hypot(dx, dy, dz);
+    if (l < 1e-3) return true;
+    return R.rayWorld(o, [dx / l, dy / l, dz / l], l, W.near) >= l - 0.2;
+  }
+  function pickTarget(b, W) {
+    let best = null, bd = 1e9;
+    const fx = Math.sin(b.ry), fz = Math.cos(b.ry);
+    for (const t of W.fighters) {
+      if (t === b || !t.alive || (b.team !== null && b.team === t.team)) continue;
+      const dx = t.x - b.x, dz = t.z - b.z, d = Math.hypot(dx, dz);
+      if (d > b.diff.sight) continue;
+      const inView = d < 5 || (dx * fx + dz * fz) / (d || 1) > -0.15 || (b.lastHitBy === t && W.now - b.lastHitAt < 2.5);
+      if (!inView) continue;
+      const score = d - (t === b.target ? 8 : 0);
+      if (score < bd && sees(b, t, W)) { best = t; bd = score; }
+    }
+    return best;
+  }
+  function routeTo(b, x, z, W) { b.route = W.nav.path(b.x, b.z, x, z); }
+  function coverSpot(b, W) {
+    const t = b.target; let best = null, bd = 1e9;
+    for (let i = 0; i < 14; i++) {
+      const a = W.rand() * 6.28, r = 5 + W.rand() * 12, x = b.x + Math.cos(a) * r, z = b.z + Math.sin(a) * r; if (!W.nav.isOpen(x, z)) continue;
+      const dx = t.x - x, dz = t.z - z, l = Math.hypot(dx, dz), o = [x, EYE, z];
+      if (R.rayWorld(o, [dx / l, 0, dz / l], l, W.near) >= l - 0.3) continue;
+      const score = r + (Math.hypot(t.x - b.x, t.z - b.z) > l ? 8 : 0); if (score < bd) { bd = score; best = [x, z]; }
+    }
+    return best;
+  }
+  function think(b, W) {
+    const prev = b.target, t = pickTarget(b, W);
+    if (t) {
+      if (t !== prev) { b.reactAt = W.now + rng(W.rand, b.diff.react) * (Math.hypot(t.x - b.x, t.z - b.z) < 5 ? 0.6 : 1); b.trackT = 0; b.burst = 0; }
+      b.target = t; b.seenAt = W.now; b.lastSeen = [t.x, t.z]; b.state = 'fight';
+      if (b.hp < 35 && !b.runTo && W.rand() < b.diff.retreat) { const c = coverSpot(b, W); if (c) { b.runTo = W.now + 3; routeTo(b, c[0], c[1], W); b.state = 'retreat'; } }
+    } else if (b.state === 'fight') {
+      b.target = null; b.state = 'chase'; if (b.lastSeen) routeTo(b, b.lastSeen[0], b.lastSeen[1], W); b.chaseUntil = W.now + 6;
+    } else if (b.state === 'chase' && (W.now > b.chaseUntil || !b.route.length)) {
+      b.state = 'roam'; b.route = [];
+    }
+    if (b.runTo && W.now > b.runTo) { b.runTo = null; if (b.state === 'retreat') b.state = t ? 'fight' : 'roam'; }
+    if (b.state === 'roam') {
+      if (b.heard && W.now - b.heard.t < 6) { routeTo(b, b.heard.x, b.heard.z, W); b.heard = null; b.state = 'chase'; b.chaseUntil = W.now + 8; }
+      else if (!b.route.length && W.now >= b.holdAt) { const s = W.nav.randomSpot(W.rand); routeTo(b, s[0], s[1], W); if (W.rand() < 0.25) b.holdAt = W.now + 0.8 + W.rand() * 1.6; }
+    }
+  }
+  function walkRoute(b, sp, dt, W) {
+    let n = b.route[0]; if (!n) return 0;
+    let dx = n[0] - b.x, dz = n[1] - b.z, d = Math.hypot(dx, dz);
+    if (d < 0.6) { b.route.shift(); n = b.route[0]; if (!n) return 0; dx = n[0] - b.x; dz = n[1] - b.z; d = Math.hypot(dx, dz); }
+    const s = Math.min(sp * dt, d); slide(b, dx / d * s, dz / d * s, W.near); b.ry = Math.atan2(dx, dz); return sp;
+  }
+  function aimAndFire(b, dt, W) {
+    const t = b.target; if (!t || !t.alive) return;
+    const o = [b.x, b.y + EYE, b.z], tx = t.x, ty = t.y + CHEST - 0.1, tz = t.z, dx = tx - o[0], dy = ty - o[1], dz = tz - o[2], hd = Math.hypot(dx, dz), want = Math.atan2(dx, dz);
+    b.ry = want; b.trackT += dt;
+    if (W.now < b.reactAt) return;
+    const D = b.diff, w = R.WEAPONS[b.weapon];
+    if (hd > (w.range || 60) || (w.pellets > 1 && hd > 22)) return;
+    if (W.now < b.pauseAt) return;
+    if (!R.canFire(b, W.now)) return;
+    if (!sees(b, t, W)) return;
+    // aim starts rough and settles while the bot tracks you; running targets are harder
+    const settle = 0.3 + 0.7 * Math.exp(-b.trackT / D.settle), mv = t.speed || 0, err = D.err * settle * (1 + mv * 0.09);
+    const yaw = want + (W.rand() - 0.5) * 2 * err, pitch = Math.atan2(dy, hd) + (W.rand() - 0.5) * 1.4 * err, c = Math.cos(pitch);
+    const shot = R.fire(b, [Math.sin(yaw) * c, Math.sin(pitch), Math.cos(yaw) * c], { moving:b.speed > 0.5, running:false, ads:true }, W.now, W.rand);
+    if (!shot) return;
+    W.onShot(b, shot, o);
+    if (w.auto) { if (b.burst <= 0) b.burst = Math.round(rng(W.rand, D.burst)); if (--b.burst <= 0) b.pauseAt = W.now + rng(W.rand, D.pause); }
+    else b.pauseAt = W.now + rng(W.rand, D.pause) * 0.6;
+  }
+  function step(b, dt, W) {
+    if (!b.alive) return;
+    R.tick(b, dt, W.now);
+    if ((b.think -= dt) <= 0) { b.think = 0.18 + W.rand() * 0.1; think(b, W); }
+    let sp = 0;
+    if (b.state === 'fight' && b.target) {
+      const t = b.target, dist = Math.hypot(t.x - b.x, t.z - b.z), like = LIKES[b.weapon] || 15;
+      if (dist > like * 1.3) { if (!b.route.length || W.now > (b.repathAt || 0)) { routeTo(b, t.x, t.z, W); b.repathAt = W.now + 0.8; } sp = walkRoute(b, RUN * 0.85, dt, W); }
+      else {
+        if (W.now > b.strafeAt) { b.strafing = W.rand() < b.diff.strafe; b.strafeDir = W.rand() < 0.5 ? -1 : 1; b.strafeAt = W.now + 0.6 + W.rand() * 1.1; }
+        if (b.strafing) {
+        const l = dist || 1, back = dist < like * 0.5 ? -0.6 : 0, nx = (t.x - b.x) / l, nz = (t.z - b.z) / l;
+        const mx = -nz * b.strafeDir + nx * back, mz = nx * b.strafeDir + nz * back, nextX = b.x + mx * 1.2, nextZ = b.z + mz * 1.2;
+        if (W.nav.isOpen(nextX, nextZ)) { slide(b, mx * WALK * dt, mz * WALK * dt, W.near); sp = WALK; } else b.strafeDir *= -1;
+        }
+      }
+      aimAndFire(b, dt, W);
+    } else if (b.state === 'retreat') sp = walkRoute(b, RUN, dt, W);
+    else if (b.state === 'chase') sp = walkRoute(b, RUN * 0.85, dt, W);
+    else sp = walkRoute(b, WALK, dt, W);
+    b.y = W.groundAt(b.x, b.z, b.y + 0.6);
+    // stuck on something: drop the route and let the next thought find a new one
+    const moved = Math.hypot(b.x - b.lastX, b.z - b.lastZ); b.lastX = b.x; b.lastZ = b.z;
+    if (sp > 0 && moved < sp * dt * 0.25) { b.stuck += dt; if (b.stuck > 0.7) { b.stuck = 0; b.route = []; b.holdAt = 0; const s = W.nav.snap(b.x, b.z), c = W.nav.centre(s); slide(b, (c[0] - b.x) * 0.3, (c[1] - b.z) * 0.3, W.near); } } else b.stuck = Math.max(0, b.stuck - dt);
+    b.speed = sp;
+  }
+  // bots react to gunfire they can hear
+  function hearShot(bots, x, z, shooter, W) {
+    for (const b of bots) { if (b === shooter || !b.alive || b.state !== 'roam') continue; const d = Math.hypot(b.x - x, b.z - z); if (d < 34 && W.rand() < 0.5) b.heard = { x, z, t:W.now }; }
+  }
+  function respawn(b, spot, W) {
+    const fresh = R.newFighter({ id:b.id, weapon:b.weapon, team:b.team });
+    Object.assign(b, { ammo:fresh.ammo, hp:b.maxHp, alive:true, reloadAt:0, nextFire:0, bloom:0, x:spot[0], z:spot[1], y:W.groundAt(spot[0], spot[1], 2), state:'roam', route:[], target:null, runTo:null, lastSeen:null, burst:0, heard:null, lastX:spot[0], lastZ:spot[1] });
+  }
+  return { DIFF, makeNav, newBot, step, hearShot, respawn, sees, RADIUS };
+});

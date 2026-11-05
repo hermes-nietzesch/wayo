@@ -4,10 +4,10 @@
    themselves are in rules.js. Prop hunt never runs this code.
    ===================================================================== */
 const SHOOTER = (() => {
-  const R = window.WAYO_RULES, W = R.WEAPONS;
+  const R = window.WAYO_RULES, W = R.WEAPONS, BOTS = window.WAYO_BOTS;
   const el = s => document.querySelector(s);
   const S = { active:false, now:0, me:null, targets:[], trigger:false, pressed:false, ads:false, adsT:0, paused:false,
-    pitchDebt:0, recoverDebt:0, vKick:0, vRoll:0, swing:0, bob:0, flashT:0, hitT:0, stats:null, last:'pistol' };
+    pitchDebt:0, recoverDebt:0, vKick:0, vRoll:0, swing:0, bob:0, flashT:0, hitT:0, stats:null, last:'pistol', mode:'range', diff:'medium', bots:[], W:null, deadT:0, hurtT:0 };
 
   /* ---------------- first-person gun, drawn after the world so it never pokes through walls */
   const vmScene = new THREE.Scene(), vmCam = new THREE.PerspectiveCamera(46, 1, 0.01, 10), rig = new THREE.Group();
@@ -126,11 +126,19 @@ body.sh-on #cross,body.sh-on #gbtns{display:none!important}
 #shRel{width:60px;height:60px;right:calc(env(safe-area-inset-right,0px) + 146px);bottom:calc(env(safe-area-inset-bottom,0px) + 92px)}
 body.sh-on.sh-touch #shAmmo{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 56px);right:auto;left:calc(env(safe-area-inset-left,0px) + 14px);text-align:left}
 body.sh-on.sh-touch #shAmmo b{font-size:30px}
+#shHp{position:absolute;left:calc(env(safe-area-inset-left,0px) + 24px);bottom:calc(env(safe-area-inset-bottom,0px) + 20px);width:190px;text-shadow:0 1px 3px #000}
+#shHp span{display:block;font:400 26px/1 var(--display);margin-bottom:5px}#shHp div{height:8px;background:rgba(0,0,0,.55);border-radius:3px;overflow:hidden}#shHp i{display:block;height:100%;background:#3fbf5f;width:100%}#shHp.low i{background:var(--accent)}#shHp.low span{color:var(--accent)}
+body.sh-on.sh-touch #shHp{left:calc(env(safe-area-inset-left,0px) + 120px);top:calc(env(safe-area-inset-top,0px) + 58px);bottom:auto;width:110px}body.sh-on.sh-touch #shHp span{font-size:18px}
+#shHurt{position:absolute;inset:0;opacity:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(190,16,10,.75) 100%)}
+#shDir{position:absolute;left:50%;top:50%;width:0;height:0;opacity:0}#shDir i{position:absolute;left:-46px;top:-150px;width:92px;height:22px;border-top:5px solid #ff3b2f;border-radius:50%;box-shadow:0 -2px 6px rgba(255,40,30,.7)}
+#shFeed{position:absolute;right:calc(env(safe-area-inset-right,0px) + 14px);top:calc(env(safe-area-inset-top,0px) + 196px);text-align:right;font-size:12px;text-shadow:0 1px 2px #000}#shFeed div{background:rgba(8,8,11,.5);padding:3px 8px;border-radius:5px;margin-top:3px}#shFeed b{color:var(--accent)}
+body.sh-on.sh-touch #shFeed{top:calc(env(safe-area-inset-top,0px) + 58px);right:calc(env(safe-area-inset-right,0px) + 122px)}
+#shDead{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(60,0,0,.45);text-align:center}#shDead b{display:block;font:400 34px/1 var(--display);color:var(--accent);margin-bottom:8px}
 body.sh-on #streetName,body.sh-on #coords{display:none}`;
     document.head.appendChild(css);
     const d = document.createElement('div'); d.id = 'shHud'; d.hidden = true;
     d.innerHTML = `<div id="shX"><i class="u"></i><i class="d"></i><i class="l"></i><i class="r"></i></div><div id="shHit"></div><div id="shFloat"></div>
-<div id="shStats"></div><div id="shReload" hidden><i></i></div><div id="shAmmo"><b id="shMag"></b><span id="shName"></span></div><div id="shSlots"></div>
+<div id="shHurt"></div><div id="shDir"><i></i></div><div id="shFeed"></div><div id="shHp" hidden><span id="shHpN">100</span><div><i id="shHpBar"></i></div></div><div id="shDead" hidden><div><b>You don fall</b><span id="shDeadBy"></span></div></div><div id="shStats"></div><div id="shReload" hidden><i></i></div><div id="shAmmo"><b id="shMag"></b><span id="shName"></span></div><div id="shSlots"></div>
 ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFireL" aria-label="Fire">FIRE</button><button id="shAim" aria-pressed="false">AIM</button><button id="shRel">RELOAD</button></div><button id="shExit">Exit</button>' : ''}
 <div id="shPause" hidden><div><h2>Paused</h2><button class="go" id="shResume">Keep shooting</button><button id="shQuit">Back to menu</button></div></div>`;
     document.body.appendChild(d);
@@ -157,7 +165,12 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     el('#shMag').innerHTML = w.melee ? '&nbsp;' : `${a.mag} <small>/ ${a.reserve}</small>`;
     el('#shName').textContent = w.name; el('#shAmmo').classList.toggle('low', !w.melee && a.mag <= Math.ceil(w.mag * 0.2));
     for (const b of el('#shSlots').children) b.setAttribute('aria-pressed', String(b.dataset.w === f.weapon));
-    const st = S.stats; el('#shStats').innerHTML = `Hits <b>${st.hits}</b> · Headshots <b>${st.heads}</b> · Down <b>${st.kills}</b> · Accuracy <b>${st.shots ? Math.round(st.hits / st.shots * 100) : 0}%</b>`;
+    const st = S.stats;
+    if (S.mode === 'bots'){
+      const top = S.bots.reduce((a, b) => b.kills > a.kills ? b : a, S.bots[0]), hp = Math.max(0, Math.ceil(f.hp));
+      el('#shStats').innerHTML = `Kills <b>${f.kills}</b> · Deaths <b>${f.deaths}</b> · Top bot <b>${top.name} ${top.kills}</b> · ${S.diff}`;
+      el('#shHpN').textContent = hp; el('#shHpBar').style.width = hp + '%'; el('#shHp').classList.toggle('low', hp <= 35);
+    } else el('#shStats').innerHTML = `Hits <b>${st.hits}</b> · Headshots <b>${st.heads}</b> · Down <b>${st.kills}</b> · Accuracy <b>${st.shots ? Math.round(st.hits / st.shots * 100) : 0}%</b>`;
   }
   function floatNum(x, y, z, n, head){
     _v.set(x, y, z).project(camera); if (_v.z > 1) return;
@@ -207,6 +220,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     const f = S.me, id = f.weapon, w = W[id], o = eye(), shot = R.fire(f, aimDir(), moveState(), S.now, Math.random);
     if (!shot) return false;
     bang(id); S.stats.shots++;
+    if (S.mode === 'bots') BOTS.hearShot(S.bots, f.x, f.z, f, botWorld());
     if (w.melee){
       S.swing = 1;
       const hit = R.knifeTrace(o, shot.dirs[0], S.targets, near, f);
@@ -230,17 +244,91 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   }
   function report(T, parts, killed){
     const p = parts[0]; floatNum(p.at[0], p.at[1], p.at[2], p.d, p.head); hitMark(p.head); click(0.22, p.head ? 4800 : 3400);
-    if (killed){ S.stats.kills++; T.deadT = 3; GAME.debug.playOnce(T.A, 'Caught', true); }
+    if (S.mode === 'bots'){ T.lastHitBy = S.me; T.lastHitAt = S.now; if (killed) downed(T, S.me); }
+    else if (killed){ S.stats.kills++; T.deadT = 3; GAME.debug.playOnce(T.A, 'Caught', true); }
   }
   function setTrigger(v){ if (v && !S.trigger) S.pressed = true; S.trigger = v; }
   function swap(id){ if (!S.active) return; const cur = S.me.weapon; if (R.switchWeapon(S.me, id, S.now)){ S.last = cur; click(0.14, 1800); } }
   function reload(){ if (S.active && R.startReload(S.me, S.now)) click(0.16, 1500); }
   function dry(){ click(0.2, 2400); }
 
+  /* ---------------- bots: they walk the market, hunt each other and hunt you */
+  const NAMES = ['Chidi', 'Bisi', 'Tunde', 'Ngozi', 'Emeka', 'Aisha', 'Musa', 'Funke', 'Segun'];
+  const CHAR_LIST = ['task_force', 'trader_man', 'trader_woman'], ARMS_FOR = ['rifle', 'smg', 'rifle', 'pistol', 'shotgun', 'smg', 'rifle', 'pistol', 'shotgun'];
+  let NAV = null;
+  function nav(){ return NAV || (NAV = BOTS.makeNav(LAYOUT.play, (x, z) => inPlay(x, z, -1.5) && !blockedAt(x, z, 0.5) && !inFootprint(x, z, 0.15))); }
+  function botWorld(){ const w = S.W; w.now = S.now; return w; }
+  function farSpot(){
+    let best = null, bd = -1;
+    for (let i = 0; i < 24; i++){ const s = nav().randomSpot(Math.random), d = Math.min(...[S.me, ...S.bots].filter(f => f.alive).map(f => Math.hypot(f.x - s[0], f.z - s[1])), 1e6); if (d > bd){ bd = d; best = s; } }
+    return best;
+  }
+  const norm = n => n.replace(/^mixamorig:?/, '').replace(/_\d+$/, '');
+  function outfit(b){
+    const A = b.A, want = { RightArm:0, RightForeArm:0, RightHand:0, LeftArm:0, LeftForeArm:0 }; A.b = {};
+    A.inner.traverse(o => { if (o.isBone && norm(o.name) in want) A.b[norm(o.name)] = o; });
+    const g = new THREE.Group(), id = b.weapon, L = { pistol:0.2, smg:0.36, rifle:0.72, shotgun:0.78 }[id];
+    part(g, STEEL, 0.045, 0.06, L * 0.6, 0, 0.02, L * 0.12); part(g, id === 'rifle' || id === 'shotgun' ? WOOD : PLASTIC, 0.04, 0.09, L * 0.3, 0, -0.01, -L * 0.25); tube(g, DARK, 0.012, L * 0.45, 0, 0.03, L * 0.5); part(g, PLASTIC, 0.03, 0.09, 0.05, 0, -0.06, 0);
+    const fl = new THREE.Sprite(FLASH.material); fl.position.set(0, 0.03, L * 0.75); fl.scale.setScalar(0.55); fl.visible = false; g.add(fl); g.userData.fl = fl;
+    A.root.add(g); A.gun = g; A.flashT = 0;
+  }
+  const _q0 = new THREE.Quaternion(), _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _y = new THREE.Vector3(0, 1, 0), _d = new THREE.Vector3(), _c = new THREE.Vector3();
+  // turn one arm bone so it points along a direction in the character's own space (+z forward, +x left)
+  function point(bone, dx, dy, dz, root){
+    if (!bone) return;
+    _d.set(dx, dy, dz).normalize().applyQuaternion(root.quaternion);
+    bone.updateWorldMatrix(true, false); bone.getWorldQuaternion(_q0); _c.copy(_y).applyQuaternion(_q0).normalize();
+    _q1.setFromUnitVectors(_c, _d).multiply(_q0); bone.parent.getWorldQuaternion(_q2).invert(); bone.quaternion.copy(_q2.multiply(_q1));
+  }
+  // hold the gun up on top of the walk animation, until real shooting animations go in
+  function aimPose(b){
+    const A = b.A, B = A.b, r = A.root, up = b.state === 'fight' || b.state === 'chase' ? 1 : 0.55;
+    point(B.RightArm, -0.28, -0.75 + up * 0.25, 0.65, r); point(B.RightForeArm, 0.1, 0.02 - (1 - up) * 0.3, 1, r);
+    point(B.LeftArm, 0.3, -0.75 + up * 0.25, 0.65, r); point(B.LeftForeArm, -0.42, 0.04 - (1 - up) * 0.3, 1, r);
+    if (B.RightHand){ B.RightHand.updateWorldMatrix(true, false); B.RightHand.getWorldPosition(_v); A.gun.position.copy(r.worldToLocal(_v)); A.gun.rotation.set(up < 1 ? 0.3 : 0, 0, 0); }
+  }
+  function botShot(b, shot, o){
+    const w = W[shot.weapon], d0 = Math.hypot(b.x - S.me.x, b.z - S.me.z), hand = b.A.gun, world = S.W;
+    bang(shot.weapon, Math.max(1, d0));
+    b.A.flashT = 0.05; BOTS.hearShot(S.bots, b.x, b.z, b, world);
+    hand.updateWorldMatrix(true, false); hand.getWorldPosition(_a);
+    const all = [S.me, ...S.bots], hits = new Map();
+    shot.dirs.forEach((d, i) => {
+      const hit = R.traceShot(o, d, w.range, all, near, b), x = o[0] + d[0] * hit.t, y = o[1] + d[1] * hit.t, z = o[2] + d[2] * hit.t;
+      if (i % 3 === 0) tracer(_a.x, _a.y, _a.z, x, y, z);
+      if (hit.t < w.range && d0 < 60) impact(x, y, z, o, !!hit.target);
+      if (hit.target) hits.set(hit.target, (hits.get(hit.target) || 0) + R.damageAt(shot.weapon, hit.t, hit.zone));
+    });
+    for (const [T, dmg] of hits){ const res = R.applyDamage(T, dmg); T.lastHitBy = b; T.lastHitAt = S.now; if (T === S.me) hurtMe(res.dealt, b); if (res.killed) downed(T, b); }
+  }
+  function hurtMe(dmg, from){
+    S.hurtT = 0.45; const a = Math.atan2(from.x - S.me.x, from.z - S.me.z); S.hurtFrom = a; blast(0.3, 0.09, 700, 1); thump(0.3, 130, 0.12);
+  }
+  function feed(html){ const d = document.createElement('div'); d.innerHTML = html; const f = el('#shFeed'); f.appendChild(d); while (f.children.length > 4) f.firstChild.remove(); setTimeout(() => d.remove(), 5000); }
+  function downed(T, by){
+    by.kills = (by.kills || 0) + 1; T.deaths = (T.deaths || 0) + 1;
+    const nm = f => f === S.me ? 'You' : f.name; feed(`${nm(by)} <b>dropped</b> ${nm(T)}`);
+    if (T === S.me){ S.deadT = 4; P.frozen = true; S.trigger = false; S.ads = false; el('#shDead').hidden = false; el('#shDeadBy').textContent = `${by.name} got you with the ${W[by.weapon].name.toLowerCase()}`; }
+    else { T.deadT = 4 + Math.random() * 2; S.stats.kills += by === S.me ? 1 : 0; T.A.gun.visible = false; GAME.debug.playOnce(T.A, 'Caught', true); }
+  }
+  function tickBots(dt){
+    const dbg = GAME.debug, Wd = botWorld(), f = S.me; f.x = P.x; f.y = P.y; f.z = P.z; const m = moveState(); f.speed = m.moving ? (m.running ? 7 : 4.3) : 0;
+    if (S.deadT > 0){ S.deadT -= dt; if (S.deadT <= 0){ const keep = { kills:f.kills, deaths:f.deaths, w:f.weapon }; const s = farSpot(); S.me = Object.assign(R.newFighter({ weapon:keep.w }), { kills:keep.kills, deaths:keep.deaths, x:s[0], z:s[1] }); Wd.fighters[0] = S.me; P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); P.frozen = false; P.vy = 0; el('#shDead').hidden = true; } }
+    for (const b of S.bots){
+      if (!b.alive){ b.deadT -= dt; if (b.deadT <= 0){ BOTS.respawn(b, farSpot(), Wd); if (b.A.shot){ b.A.shot.a.stop(); b.A.shot = null; } b.A.gun.visible = true; } }
+      BOTS.step(b, dt, Wd);
+      b.A.root.position.set(b.x, b.y, b.z); b.A.root.rotation.set(0, b.ry, 0);
+      dbg.animateAvatar(b.A, b.speed, dt);
+      if (b.alive){ aimPose(b); const fl = b.A.gun.userData.fl; if (b.A.flashT > 0){ b.A.flashT -= dt; fl.visible = true; } else fl.visible = false; }
+    }
+    if (S.hurtT > 0){ S.hurtT -= dt; el('#shHurt').style.opacity = Math.min(1, S.hurtT * 3); const dd = el('#shDir'); dd.style.opacity = Math.min(1, S.hurtT * 3); dd.style.transform = `rotate(${(P.yaw + Math.PI - S.hurtFrom) * 180 / Math.PI}deg)`; }
+    else { el('#shHurt').style.opacity = 0; el('#shDir').style.opacity = 0; }
+  }
+
   /* ---------------- first-person gun movement */
   function drawGun(dt){
     const f = S.me, id = f.weapon;
-    for (const k in GM) GM[k].visible = k === id;
+    for (const k in GM) GM[k].visible = k === id && f.alive;
     const w = W[id], g = GM[id];
     S.adsT += ((S.ads && !w.melee ? 1 : 0) - S.adsT) * Math.min(1, dt * 14);
     S.vKick = Math.max(0, S.vKick - dt * (w.melee ? 3 : 9));
@@ -266,22 +354,32 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
 
   /* ---------------- start, stop and the per-frame step */
   const STAND = { WALK, RUN, fov:camera.fov };
-  function start(){
+  function start(opts = {}){
     if (S.active || !GAME.S.ready) return;
+    S.mode = opts.mode || 'range'; S.diff = opts.diff || 'medium';
     buildHud(); makeFx(); audio(); loadShots();
     const spots = streetSpots(), s = spots[Math.floor(spots.length / 2)];
     P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); P.vy = 0; P.yaw = 0; P.pitch = 0; P.fly = false; P.frozen = false;
-    S.me = R.newFighter({ weapon:'rifle' }); S.stats = { shots:0, hits:0, heads:0, kills:0 }; S.now = 0; S.ads = false; S.adsT = 0; S.trigger = false; S.pressed = false; S.targets = [];
-    spawnTargets(spots);
+    S.me = Object.assign(R.newFighter({ weapon:'rifle' }), { kills:0, deaths:0, x:P.x, y:P.y, z:P.z }); S.deadT = 0; S.hurtT = 0; S.stats = { shots:0, hits:0, heads:0, kills:0 }; S.now = 0; S.ads = false; S.adsT = 0; S.trigger = false; S.pressed = false; S.targets = [];
+    S.bots = [];
+    if (S.mode === 'bots'){
+      S.W = { fighters:[S.me], near, nav:nav(), groundAt:(x, z, y) => groundAt(x, z, y), rand:Math.random, now:0, onShot:botShot };
+      for (let i = 0; i < 9; i++){
+        const s = farSpot(), b = BOTS.newBot({ id:'b' + i, name:NAMES[i], x:s[0], z:s[1], weapon:ARMS_FOR[i] }, S.diff);
+        b.y = groundAt(s[0], s[1], 2); b.A = GAME.debug.makeAvatar(CHAR_LIST[i % 3]); outfit(b); S.bots.push(b); S.W.fighters.push(b);
+      }
+      S.targets = S.bots;
+    } else spawnTargets(spots);
     MUSIC.stop(); started = true; S.active = true; el('#start').hidden = true; el('#shHud').hidden = false; setPaused(false);
     document.body.classList.add('sh-on'); document.body.classList.toggle('sh-touch', TOUCH);
+    el('#shHp').hidden = S.mode !== 'bots'; el('#shDead').hidden = true; el('#shFeed').innerHTML = ''; el('#shHurt').style.opacity = 0;
     if (!TOUCH) canvas.requestPointerLock?.()?.catch?.(() => {});
-    toast(TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · 1 to 5 swap guns · Esc pause', 4200);
+    toast(S.mode === 'bots' ? 'Nine bots dey hunt you. Everybody for himself' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · 1 to 5 swap guns · Esc pause', 4200);
   }
   function stop(){
     if (!S.active) return;
-    S.active = false; started = false; WALK = STAND.WALK; camera.fov = STAND.fov; camera.updateProjectionMatrix();
-    for (const T of S.targets) scene.remove(T.A.root); S.targets = [];
+    S.active = false; started = false; P.frozen = false; WALK = STAND.WALK; camera.fov = STAND.fov; camera.updateProjectionMatrix();
+    for (const T of S.targets) scene.remove(T.A.root); S.targets = []; S.bots = [];
     for (const g of [...FX.tr, ...FX.puff]){ g.m.visible = false; g.life = 0; } for (const m of FX.mark) m.visible = false;
     el('#shHud').hidden = true; el('#start').hidden = false; document.body.classList.remove('sh-on', 'sh-touch');
     if (document.pointerLockElement) document.exitPointerLock(); MUSIC.start();
@@ -289,7 +387,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   function tick(dt){
     if (!S.active) return;
     if (S.paused) return;
-    S.now += dt; const f = S.me, w = W[f.weapon];
+    S.now += dt; if (S.W) S.W.now = S.now; let f = S.me; const w = W[f.weapon];
     R.tick(f, dt, S.now);
     if (S.pressed || (S.trigger && w.auto)){
       const fired = shoot();
@@ -301,7 +399,8 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     if (!S.trigger && S.recoverDebt > 0){ const d = Math.min(S.recoverDebt, S.recoverDebt * dt * 7 + 0.0004); P.pitch -= d; S.recoverDebt -= d; } 
     WALK = STAND.WALK * w.moveMul * (S.ads ? 0.62 : 1);
     const fov = STAND.fov + ((w.zoom || STAND.fov) - STAND.fov) * S.adsT; if (Math.abs(camera.fov - fov) > 0.01){ camera.fov = fov; camera.updateProjectionMatrix(); }
-    tickTargets(dt); tickFx(dt); drawGun(dt); drawCross(dt); drawHud();
+    if (S.mode === 'bots') tickBots(dt); else tickTargets(dt);
+    tickFx(dt); drawGun(dt); drawCross(dt); drawHud();
   }
   function render(){
     if (!S.active) return;
@@ -321,6 +420,6 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   });
   addEventListener('wheel', e => { if (!S.active || document.pointerLockElement !== canvas) return; const i = R.ORDER.indexOf(S.me.weapon), n = R.ORDER.length; swap(R.ORDER[(i + (e.deltaY > 0 ? 1 : n - 1)) % n]); }, { passive:true });
   document.addEventListener('pointerlockchange', () => { if (S.active && !TOUCH && !window.__TEST) setPaused(document.pointerLockElement !== canvas); });
-  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF };
+  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF, aimPoseFor:aimPose };
 })();
 window.SHOOTER = SHOOTER;
