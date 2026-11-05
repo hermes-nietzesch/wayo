@@ -22,6 +22,7 @@
     knife:  { name:'Knife', slot:6, melee:true, auto:true, dmg:45, headMul:1.5, cd:0.5, reach:2.3, kick:0, moveMul:1.08, hip:0, ads:0, bloom:0, bloomMax:0 },
   };
   const ORDER = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'knife'];
+  const BEST = ['rifle', 'smg', 'shotgun', 'sniper', 'pistol'], ARMOR_SOAK = 0.6;
   const SWAP_TIME = 0.32, BLOOM_DECAY = 0.07;
   const MOVE_SPREAD = 0.012, RUN_SPREAD = 0.03, AIR_SPREAD = 0.05;
   const PLAYER = { hp:100, radius:0.3, bodyTop:1.42, headTop:1.78 };
@@ -35,8 +36,14 @@
   function newFighter(o = {}) {
     const ammo = {};
     for (const id of ORDER) { const w = WEAPONS[id]; if (!w.melee) ammo[id] = { mag:w.mag, reserve:w.reserve }; }
-    return { id:o.id ?? 'me', team:o.team ?? null, x:o.x || 0, y:o.y || 0, z:o.z || 0, hp:PLAYER.hp, maxHp:PLAYER.hp, alive:true,
+    const f = { id:o.id ?? 'me', team:o.team ?? null, x:o.x || 0, y:o.y || 0, z:o.z || 0, hp:PLAYER.hp, maxHp:PLAYER.hp, armor:0, alive:true,
       ammo, weapon:o.weapon || 'rifle', nextFire:0, reloadAt:0, swapAt:0, bloom:0 };
+    if (o.loadout) {   // battle royale: you only carry what you start with and what you find
+      f.owned = {}; for (const id of o.loadout) f.owned[id] = true;
+      for (const id in ammo) { ammo[id].mag = 0; ammo[id].reserve = 0; }
+      f.ammo.pistol.mag = WEAPONS.pistol.mag; f.ammo.pistol.reserve = 12; f.weapon = 'pistol';
+    }
+    return f;
   }
 
   const reloading = (f, now) => f.reloadAt > now;
@@ -49,7 +56,7 @@
     f.reloadAt = now + w.reload; f.reloadId = f.weapon; return true;
   }
   function switchWeapon(f, id, now) {
-    if (!WEAPONS[id] || id === f.weapon || !f.alive) return false;
+    if (!WEAPONS[id] || id === f.weapon || !f.alive || (f.owned && !f.owned[id])) return false;
     f.weapon = id; f.reloadAt = 0; f.bloom = 0; f.swapAt = now + SWAP_TIME; return true;
   }
   // call every simulation step
@@ -89,9 +96,49 @@
   }
   function applyDamage(t, dmg) {
     if (!t.alive) return { dealt:0, killed:false };
-    const dealt = Math.min(t.hp, dmg); t.hp -= dealt; if (t.hp <= 0) t.alive = false;
+    const soak = Math.min(t.armor || 0, dmg * ARMOR_SOAK); if (soak) t.armor -= soak;   // armour takes most of the hit until it runs out
+    const dealt = Math.min(t.hp, dmg - soak); t.hp -= dealt; if (t.hp <= 0.001) { t.hp = 0; t.alive = false; }
     return { dealt, killed:!t.alive };
   }
+  function burn(t, dmg) {   // zone damage ignores armour
+    if (!t.alive) return false; t.hp -= dmg; if (t.hp <= 0.001) { t.hp = 0; t.alive = false; return true; } return false;
+  }
+  function bestGun(f) {
+    for (const id of BEST) if ((!f.owned || f.owned[id]) && f.ammo[id] && f.ammo[id].mag + f.ammo[id].reserve > 0) return id;
+    return null;
+  }
+  // try to use something from the ground. Returns false if it's no use to this fighter, so it stays there.
+  function takeItem(f, it) {
+    if (it.kind === 'gun') {
+      const w = WEAPONS[it.weapon], a = f.ammo[it.weapon];
+      if (f.owned && !f.owned[it.weapon]) { f.owned[it.weapon] = true; a.mag = w.mag; a.reserve = w.mag; return true; }
+      a.reserve += w.mag; return true;
+    }
+    if (it.kind === 'ammo') { for (const id in f.ammo) if (!f.owned || f.owned[id]) f.ammo[id].reserve += Math.ceil(WEAPONS[id].mag * 0.75); return true; }
+    if (it.kind === 'armor') { if ((f.armor || 0) >= 100) return false; f.armor = Math.min(100, (f.armor || 0) + 50); return true; }
+    if (it.kind === 'med') { if (f.hp >= f.maxHp) return false; f.hp = Math.min(f.maxHp, f.hp + 50); return true; }
+    return false;
+  }
+  /* the zone: wait, shrink towards the next circle, repeat. Hurts more every phase. */
+  const ZONE_PHASES = [
+    { wait:45, shrink:35, r:66, dps:2 }, { wait:35, shrink:30, r:43, dps:3 }, { wait:30, shrink:25, r:27, dps:5 },
+    { wait:25, shrink:20, r:15, dps:8 }, { wait:20, shrink:20, r:4, dps:12 },
+  ];
+  function makeZone(cx, cz, r, nextCentre) {
+    const z = { cx, cz, r, phase:0, shrinking:false, dps:1, done:false, nextCentre, sx:cx, sz:cz, sr:r };
+    const p = ZONE_PHASES[0], c = nextCentre(cx, cz, r, p.r); z.nx = c[0]; z.nz = c[1]; z.nr = p.r; z.t = p.wait; return z;
+  }
+  function zoneTick(z, dt) {
+    if (z.done) return; z.t -= dt; const p = ZONE_PHASES[z.phase];
+    if (!z.shrinking) { if (z.t <= 0) { z.shrinking = true; z.t = p.shrink; z.sx = z.cx; z.sz = z.cz; z.sr = z.r; z.dps = p.dps; } return; }
+    const k = Math.min(1, 1 - z.t / p.shrink); z.cx = z.sx + (z.nx - z.sx) * k; z.cz = z.sz + (z.nz - z.sz) * k; z.r = z.sr + (z.nr - z.sr) * k;
+    if (z.t <= 0) {
+      z.phase++; z.shrinking = false; const q = ZONE_PHASES[z.phase];
+      if (!q) { z.done = true; z.t = 0; return; }
+      const c = z.nextCentre(z.cx, z.cz, z.r, q.r); z.nx = c[0]; z.nz = c[1]; z.nr = q.r; z.t = q.wait;
+    }
+  }
+  const inZone = (z, x, y) => Math.hypot(x - z.cx, y - z.cz) <= z.r;
 
   function slab(p, d, lo, hi, r) {
     if (Math.abs(d) < 1e-7) return p >= lo && p <= hi;
@@ -161,5 +208,5 @@
     }
     return best;
   }
-  return { WEAPONS, ORDER, PLAYER, STANCE, newFighter, canFire, reloading, startReload, switchWeapon, tick, spreadOf, fire, damageAt, applyDamage, rayBox, rayWorld, hitboxes, traceShot, knifeTrace };
+  return { WEAPONS, ORDER, BEST, PLAYER, STANCE, ZONE_PHASES, bestGun, takeItem, burn, makeZone, zoneTick, inZone, newFighter, canFire, reloading, startReload, switchWeapon, tick, spreadOf, fire, damageAt, applyDamage, rayBox, rayWorld, hitboxes, traceShot, knifeTrace };
 });

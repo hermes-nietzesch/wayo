@@ -96,7 +96,7 @@
   }
 
   function newBot(o, diff) {
-    const b = R.newFighter(o); b.isBot = true; b.name = o.name; b.diff = DIFF[diff] || DIFF.medium; b.ry = 0; b.speed = 0; b.kills = 0; b.deaths = 0;
+    const b = R.newFighter(o); b.isBot = true; b.gearId = b.weapon; b.name = o.name; b.diff = DIFF[diff] || DIFF.medium; b.ry = 0; b.speed = 0; b.kills = 0; b.deaths = 0;
     Object.assign(b, { state:'roam', route:[], think:Math.random() * 0.3, target:null, seenAt:0, reactAt:0, trackT:0, burst:0, pauseAt:0, strafeDir:1, strafeAt:0, lastX:b.x, lastZ:b.z, stuck:0, heard:null, holdAt:0, aimYaw:0, aimPitch:0, runTo:null, vx:0, vz:0, wantX:0, wantZ:0, back:false });
     return b;
   }
@@ -109,12 +109,14 @@
   }
   function pickTarget(b, W) {
     let best = null, bd = 1e9;
+    // battle royale opens with a quiet looting spell: bots only fight back if someone starts it
+    if (W.now < (W.graceUntil || 0) && !(b.lastHitBy && W.now - b.lastHitAt < 3)) return null;
     const fx = Math.sin(b.ry), fz = Math.cos(b.ry);
     for (const t of W.fighters) {
       if (t === b || !t.alive || (b.team !== null && b.team === t.team)) continue;
       const dx = t.x - b.x, dz = t.z - b.z, d = Math.hypot(dx, dz);
       const wasHit = b.lastHitBy === t && W.now - b.lastHitAt < 2.5;
-      if (d > b.diff.sight * (wasHit ? 1 : [1, 0.8, 0.55][t.stance || 0])) continue;   // low targets are harder to spot
+      if (d > b.diff.sight * (W.sightMul || 1) * (wasHit ? 1 : [1, 0.8, 0.55][t.stance || 0])) continue;   // low targets are harder to spot
       const inView = d < 5 || (dx * fx + dz * fz) / (d || 1) > -0.15 || (b.lastHitBy === t && W.now - b.lastHitAt < 2.5);
       if (!inView) continue;
       const score = d - (t === b.target ? 8 : 0);
@@ -133,8 +135,32 @@
     }
     return best;
   }
+  // what on the ground is worth walking to
+  function wants(b, it) {
+    if (it.kind === 'gun') return R.BEST.indexOf(it.weapon) < R.BEST.indexOf(b.weapon) && !(b.owned && b.owned[it.weapon]);
+    if (it.kind === 'armor') return (b.armor || 0) < 50;
+    if (it.kind === 'med') return b.hp < 70;
+    if (it.kind === 'ammo') return b.ammo[b.weapon].reserve < R.WEAPONS[b.weapon].mag;
+    return false;
+  }
+  function nearestLoot(b, W) {
+    let best = null, bd = 34;
+    for (const it of W.items) { if (it.gone || it.y > 1 || !wants(b, it)) continue; const d = Math.hypot(it.x - b.x, it.z - b.z); if (d < bd) { bd = d; best = it; } }
+    return best;
+  }
   function think(b, W) {
     const prev = b.target, t = pickTarget(b, W);
+    // the zone comes first: get inside the next safe circle before it closes
+    const Z = W.zone;
+    if (Z) {
+      const need = Z.shrinking ? 0.8 : 0.92, away = Math.hypot(b.x - Z.nx, b.z - Z.nz) > Z.nr * need, burning = Math.hypot(b.x - Z.cx, b.z - Z.cz) > Z.r - 1;
+      if ((away && (Z.shrinking || Z.t < 16 || !t)) || burning) {
+        if (t) { if (t !== prev) { b.reactAt = W.now + 0.4; b.trackT = 0; } b.target = t; } else b.target = null;
+        if (b.state !== 'rotate' || !b.route.length) { const a = W.rand() * 6.28, r = Z.nr * 0.55 * W.rand(); routeTo(b, Z.nx + Math.cos(a) * r, Z.nz + Math.sin(a) * r, W); b.state = 'rotate'; }
+        return;
+      }
+      if (b.state === 'rotate') { b.state = 'roam'; b.route = []; }
+    }
     if (t) {
       if (t !== prev) { b.reactAt = W.now + rng(W.rand, b.diff.react) * (Math.hypot(t.x - b.x, t.z - b.z) < 5 ? 0.6 : 1); b.trackT = 0; b.burst = 0; }
       b.target = t; b.seenAt = W.now; b.lastSeen = [t.x, t.z]; b.state = 'fight';
@@ -146,6 +172,11 @@
       b.state = 'roam'; b.route = [];
     }
     if (b.runTo && W.now > b.runTo) { b.runTo = null; if (b.state === 'retreat') b.state = t ? 'fight' : 'roam'; }
+    if (b.state === 'loot' && (!b.lootItem || b.lootItem.gone || !b.route.length)) { b.state = 'roam'; b.lootItem = null; b.route = []; }
+    if (b.state === 'roam' && W.items) {
+      const it = nearestLoot(b, W);
+      if (it) { b.lootItem = it; routeTo(b, it.x, it.z, W); b.state = 'loot'; }
+    }
     if (b.state === 'roam') {
       const call = b.team !== null && W.intel && W.intel[b.team];
       if (call && W.now - call.t < 6 && Math.hypot(call.x - b.x, call.z - b.z) < 70) { routeTo(b, call.x + (W.rand() - 0.5) * 10, call.z + (W.rand() - 0.5) * 10, W); b.state = 'chase'; b.chaseUntil = W.now + 7; }
@@ -154,7 +185,7 @@
         // real players go looking for a fight: mostly head towards someone, sometimes just patrol
         const foes = W.fighters.filter(f => f !== b && f.alive && (b.team === null || f.team !== b.team));
         let s = W.nav.randomSpot(W.rand);
-        if (foes.length && W.rand() < 0.65) { const f = foes[Math.floor(W.rand() * foes.length)]; s = [f.x + (W.rand() - 0.5) * 16, f.z + (W.rand() - 0.5) * 16]; }
+        if (foes.length && W.rand() < (W.hunt ?? 0.65)) { const f = foes[Math.floor(W.rand() * foes.length)]; s = [f.x + (W.rand() - 0.5) * 16, f.z + (W.rand() - 0.5) * 16]; }
         routeTo(b, s[0], s[1], W); if (W.rand() < 0.15) b.holdAt = W.now + 0.6 + W.rand() * 1.2;
       }
     }
@@ -189,6 +220,14 @@
   function step(b, dt, W) {
     if (!b.alive) return;
     R.tick(b, dt, W.now);
+    if (W.items) {
+      for (const it of W.items) if (!it.gone && it.y < 1 && Math.hypot(it.x - b.x, it.z - b.z) < 1.3 && R.takeItem(b, it)) W.onItem(it, b);
+      const top = R.bestGun(b), a = b.ammo[b.weapon];
+      if (!top) b.ammo.pistol.reserve = 12;                       // never left totally helpless
+      else if (top !== b.weapon && (R.BEST.indexOf(top) < R.BEST.indexOf(b.weapon) || a.mag + a.reserve === 0) && !R.reloading(b, W.now)) b.weapon = top;
+      if (b.weapon !== b.gearId) { b.gearId = b.weapon; W.onGear(b); }
+      if (a.mag === 0 && !R.reloading(b, W.now)) R.startReload(b, W.now);
+    }
     if ((b.think -= dt) <= 0) { b.think = 0.18 + W.rand() * 0.1; think(b, W); }
     let sp = 0; b.wantX = b.wantZ = 0; b.aimWant = null;
     if (b.state === 'fight' && b.target) {
@@ -202,8 +241,9 @@
         }
       }
       aimAndFire(b, dt, W);
-    } else if (b.state === 'retreat') sp = walkRoute(b, RUN, dt, W);
-    else if (b.state === 'chase') sp = walkRoute(b, RUN, dt, W);
+    } else if (b.state === 'rotate') { sp = walkRoute(b, RUN, dt, W); if (b.target && b.target.alive) aimAndFire(b, dt, W); else b.target = null; }
+    else if (b.state === 'retreat') sp = walkRoute(b, RUN, dt, W);
+    else if (b.state === 'chase' || b.state === 'loot') sp = walkRoute(b, RUN, dt, W);
     else sp = walkRoute(b, JOG, dt, W);
     // keep a person's distance from everyone else instead of walking through them
     let wx = b.wantX, wz = b.wantZ;

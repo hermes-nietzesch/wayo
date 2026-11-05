@@ -7,7 +7,7 @@ const SHOOTER = (() => {
   const R = window.WAYO_RULES, W = R.WEAPONS, BOTS = window.WAYO_BOTS;
   const el = s => document.querySelector(s);
   const S = { active:false, now:0, me:null, targets:[], trigger:false, pressed:false, ads:false, adsT:0, paused:false,
-    pitchDebt:0, recoverDebt:0, vKick:0, vRoll:0, swing:0, bob:0, flashT:0, hitT:0, stats:null, last:'pistol', mode:'range', diff:'medium', bots:[], W:null, deadT:0, hurtT:0, vx:0, vz:0, stepPhase:0, stepSide:1, sprintT:0, land:0, wasGround:true, assists:0, fight:false, team:false, round:null, score:[0, 0], spec:null, ended:false, deadAge:0, stance:0, eyeDrop:0, crouchAt:0, crouchHeld:false, runWas:false, ladders:[], climb:null, boltAt:0, baseSens:1 };
+    pitchDebt:0, recoverDebt:0, vKick:0, vRoll:0, swing:0, bob:0, flashT:0, hitT:0, stats:null, last:'pistol', mode:'range', diff:'medium', bots:[], W:null, deadT:0, hurtT:0, vx:0, vz:0, stepPhase:0, stepSide:1, sprintT:0, land:0, wasGround:true, assists:0, br:null, squad:false, oneLife:false, items:[], fight:false, team:false, round:null, score:[0, 0], spec:null, ended:false, deadAge:0, stance:0, eyeDrop:0, crouchAt:0, crouchHeld:false, runWas:false, ladders:[], climb:null, boltAt:0, baseSens:1 };
 
   /* ---------------- first-person gun, drawn after the world so it never pokes through walls */
   const vmScene = new THREE.Scene(), vmCam = new THREE.PerspectiveCamera(46, 1, 0.01, 10), rig = new THREE.Group();
@@ -64,8 +64,8 @@ const SHOOTER = (() => {
   let AC = null;
   function audio(){ if (!AC){ try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (AC && AC.state === 'suspended') AC.resume(); return AC; }
   function noise(dur){ const b = AC.createBuffer(1, Math.max(1, AC.sampleRate * dur), AC.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length); return b; }
-  function blast(vol, dur, freq, q = 0.8){ const A = audio(); if (!A) return; const s = A.createBufferSource(), f = A.createBiquadFilter(), g = A.createGain(), t = A.currentTime; s.buffer = noise(dur); f.type = 'lowpass'; f.frequency.setValueAtTime(freq, t); f.frequency.exponentialRampToValueAtTime(Math.max(80, freq * 0.15), t + dur); f.Q.value = q; g.gain.value = vol; s.connect(f).connect(g).connect(A.destination); s.start(t); }
-  function thump(vol, f0, dur){ const A = audio(); if (!A) return; const o = A.createOscillator(), g = A.createGain(), t = A.currentTime; o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(40, t + dur); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.connect(g).connect(A.destination); o.start(t); o.stop(t + dur); }
+  function blast(vol, dur, freq, q = 0.8){ const A = audio(); if (!A || A.state !== 'running') return; const s = A.createBufferSource(), f = A.createBiquadFilter(), g = A.createGain(), t = A.currentTime; s.buffer = noise(dur); f.type = 'lowpass'; f.frequency.setValueAtTime(freq, t); f.frequency.exponentialRampToValueAtTime(Math.max(80, freq * 0.15), t + dur); f.Q.value = q; g.gain.value = vol; s.connect(f).connect(g).connect(A.destination); s.start(t); }
+  function thump(vol, f0, dur){ const A = audio(); if (!A || A.state !== 'running') return; const o = A.createOscillator(), g = A.createGain(), t = A.currentTime; o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(40, t + dur); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.connect(g).connect(A.destination); o.start(t); o.stop(t + dur); }
   const BANG = { pistol:[0.55, 0.16, 4200, 160], smg:[0.42, 0.1, 5200, 190], rifle:[0.6, 0.2, 3600, 130], shotgun:[0.85, 0.32, 2400, 95] };
   const SHOTS = { pistol:{ n:2, gain:0.85 }, smg:{ n:5, gain:0.72 }, rifle:{ n:4, gain:0.9 }, shotgun:{ n:4, gain:1 }, sniper:{ n:4, gain:1 } };
   const BUF = {}, lastTake = {}; let limiter = null, soundsLoading = false;
@@ -79,7 +79,7 @@ const SHOOTER = (() => {
   }
   // dist is in metres: far shots get quieter and lose their top end, ready for bots firing across the market
   function bang(id, dist = 0){
-    const list = BUF[id], A = AC;
+    const list = BUF[id], A = AC; if (A && A.state !== 'running') return;   // sounds can't finish while audio is suspended, so don't pile them up
     if (!list || !list.length || !A){ const b = BANG[id]; if (b){ blast(b[0], b[1], b[2]); thump(b[0] * 0.8, b[3], b[1] * 1.2); } else blast(0.12, 0.12, 2800, 2); return; }
     let k = Math.floor(Math.random() * list.length); if (list.length > 1 && k === lastTake[id]) k = (k + 1) % list.length; lastTake[id] = k;
     const src = A.createBufferSource(), g = A.createGain(), lp = A.createBiquadFilter();
@@ -143,12 +143,15 @@ body.sh-on.sh-touch #shFeed{top:calc(env(safe-area-inset-top,0px) + 58px);right:
 #shBanner{position:absolute;left:50%;top:24%;transform:translateX(-50%);text-align:center;text-shadow:0 2px 8px #000;white-space:nowrap}#shBanner b{display:block;font:400 42px/1 var(--display)}#shBanner.win b{color:#5fd27d}#shBanner.lose b{color:var(--accent)}#shBanner span{font-size:15px}
 #shSpec{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 74px);transform:translateX(-50%);display:flex;gap:10px;align-items:center;background:rgba(8,8,11,.7);padding:7px 12px;border-radius:8px;pointer-events:auto}#shSpec button{background:none;border:1.5px solid var(--line);color:#fff;border-radius:6px;padding:6px 12px;font:700 13px/1 var(--body)}
 #shEnd{position:absolute;inset:0;background:rgba(5,5,8,.88);display:flex;pointer-events:auto;z-index:3;overflow:auto}#shEnd>div{width:min(680px,92vw);padding:10px 14px;margin:auto}#shEndB>section{display:grid;grid-template-columns:1fr 1fr;gap:18px}#shEnd h2{font:400 clamp(26px,9vh,44px)/1 var(--display);margin:0 0 4px;text-align:center}#shEnd h2.win{color:#5fd27d}#shEnd h2.lose{color:var(--accent)}#shEnd p{text-align:center;margin:0 0 12px;color:var(--muted)}#shEnd table{width:100%;border-collapse:collapse;font-size:13px}#shEnd td,#shEnd th{padding:4px 8px;text-align:right}#shEnd td:first-child,#shEnd th:first-child{text-align:left}#shEnd tr.me td{color:#fff;font-weight:800}#shEnd tr.sep td{padding-top:10px;color:var(--accent);font-weight:800}#shEnd .row{display:flex;gap:10px;justify-content:center;margin-top:14px}#shEnd button{background:rgba(8,8,11,.75);border:1.5px solid var(--line);color:#fff;border-radius:7px;padding:11px 18px;font:700 14px/1 var(--body);cursor:pointer}#shEnd button.go{background:var(--red);border-color:var(--red)}
+#shArm{margin-top:3px;height:5px!important}#shArm i{background:#3a8bff!important}
+#shZoneWarn{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 46px);transform:translateX(-50%);background:rgba(160,20,14,.85);padding:6px 14px;border-radius:6px;font-weight:800;font-size:13px}
+#shBurn{position:absolute;inset:0;opacity:0;background:radial-gradient(ellipse at center,transparent 35%,rgba(60,90,255,.55) 100%)}
 #shHint{position:absolute;left:50%;top:62%;transform:translateX(-50%);background:rgba(8,8,11,.6);padding:6px 12px;border-radius:6px;font-size:13px}
 body.sh-on #streetName,body.sh-on #coords{display:none}`;
     document.head.appendChild(css);
     const d = document.createElement('div'); d.id = 'shHud'; d.hidden = true;
     d.innerHTML = `<div id="shX"><i class="u"></i><i class="d"></i><i class="l"></i><i class="r"></i></div><div id="shHit"></div><div id="shFloat"></div>
-<div id="shScope" hidden></div><div id="shBanner" hidden><b></b><span></span></div><div id="shSpec" hidden><span>Watching <b id="shSpecName"></b></span><button id="shSpecNext">Next</button></div><div id="shEnd" hidden><div><h2 id="shEndT"></h2><p id="shEndS"></p><div id="shEndB"></div><div class="row"><button class="go" id="shAgain">Play again</button><button id="shEndMenu">Back to menu</button></div></div></div><div id="shElim"></div><div id="shHint" hidden></div><div id="shHurt"></div><div id="shDir"><i></i></div><div id="shFeed"></div><div id="shHp" hidden><span id="shHpN">100</span><div><i id="shHpBar"></i></div></div><div id="shDead" hidden><div><b>You don fall</b><span id="shDeadBy"></span></div></div><div id="shStats"></div><div id="shReload" hidden><i></i></div><div id="shAmmo"><i id="shStance" hidden></i><b id="shMag"></b><span id="shName"></span></div><div id="shSlots"></div>
+<div id="shScope" hidden></div><div id="shBanner" hidden><b></b><span></span></div><div id="shSpec" hidden><span>Watching <b id="shSpecName"></b></span><button id="shSpecNext">Next</button></div><div id="shEnd" hidden><div><h2 id="shEndT"></h2><p id="shEndS"></p><div id="shEndB"></div><div class="row"><button class="go" id="shAgain">Play again</button><button id="shEndMenu">Back to menu</button></div></div></div><div id="shElim"></div><div id="shHint" hidden></div><div id="shBurn"></div><div id="shZoneWarn" hidden>Outside the zone. Move!</div><div id="shHurt"></div><div id="shDir"><i></i></div><div id="shFeed"></div><div id="shHp" hidden><span id="shHpN">100</span><div><i id="shHpBar"></i></div><div id="shArm" hidden><i id="shArmBar"></i></div></div><div id="shDead" hidden><div><b>You don fall</b><span id="shDeadBy"></span></div></div><div id="shStats"></div><div id="shReload" hidden><i></i></div><div id="shAmmo"><i id="shStance" hidden></i><b id="shMag"></b><span id="shName"></span></div><div id="shSlots"></div>
 ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFireL" aria-label="Fire">FIRE</button><button id="shAim" aria-pressed="false">AIM</button><button id="shRel">RELOAD</button><button id="shCrouch" aria-pressed="false">CROUCH</button></div><button id="shExit">Exit</button>' : ''}
 <div id="shPause" hidden><div><h2>Paused</h2><button class="go" id="shResume">Keep shooting</button><button id="shQuit">Back to menu</button></div></div>`;
     document.body.appendChild(d);
@@ -158,7 +161,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     el('#shQuit').addEventListener('click', stop);
     el('#shSpecNext').addEventListener('click', () => { if (S.spec) S.spec.i++; });
     el('#shEndMenu').addEventListener('click', stop);
-    el('#shAgain').addEventListener('click', () => { const o = { mode:S.mode, diff:S.diff }; stop(); start(o); });
+    el('#shAgain').addEventListener('click', () => { const o = { mode:S.mode, diff:S.diff, squad:S.squad }; stop(); start(o); });
     if (TOUCH){
       for (const id of ['#shFire', '#shFireL']){
         // the fire button also steers, so your thumb can aim and shoot at once
@@ -209,9 +212,14 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     const f = S.me, w = W[f.weapon], a = f.ammo[f.weapon];
     el('#shMag').innerHTML = w.melee ? '&nbsp;' : `${a.mag} <small>/ ${a.reserve}</small>`;
     el('#shName').textContent = w.name; el('#shAmmo').classList.toggle('low', !w.melee && a.mag <= Math.ceil(w.mag * 0.2));
-    for (const b of el('#shSlots').children) b.setAttribute('aria-pressed', String(b.dataset.w === f.weapon));
+    for (const b of el('#shSlots').children){ b.setAttribute('aria-pressed', String(b.dataset.w === f.weapon)); b.hidden = !!(f.owned && !f.owned[b.dataset.w]); }
     const st = S.stats;
-    if (S.team){
+    if (S.br){
+      const Z = S.br.zone, left = S.W.fighters.filter(x => x.alive).length, hp = Math.max(0, Math.ceil(f.hp));
+      el('#shStats').innerHTML = `Alive <b>${left}</b> · Kills <b>${f.kills}</b> · ${Z.done ? 'Final zone' : Z.shrinking ? 'Zone closing <b>' + clock(Z.t) + '</b>' : 'Zone moves in <b>' + clock(Z.t) + '</b>'}`;
+      el('#shHpN').textContent = hp; el('#shHpBar').style.width = hp + '%'; el('#shHp').classList.toggle('low', hp <= 35);
+      el('#shArm').hidden = !f.armor; el('#shArmBar').style.width = (f.armor || 0) + '%';
+    } else if (S.team){
       const a = teamOf(0), b = teamOf(1), r = S.round, hp = Math.max(0, Math.ceil(f.hp));
       el('#shStats').innerHTML = `Task Force <b>${S.score[0]}</b> – <b>${S.score[1]}</b> Traders · Alive <b>${a.filter(x => x.alive).length}</b> v <b>${b.filter(x => x.alive).length}</b> · ${clock(r.t)} · Kills <b>${f.kills}</b>`;
       el('#shHpN').textContent = hp; el('#shHpBar').style.width = hp + '%'; el('#shHp').classList.toggle('low', hp <= 35);
@@ -315,7 +323,10 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   function outfit(b){
     const A = b.A, want = { RightArm:0, RightForeArm:0, RightHand:0, LeftArm:0, LeftForeArm:0, Spine:0, Spine1:0, Spine2:0 }; A.b = {};
     A.inner.traverse(o => { if (o.isBone && norm(o.name) in want) A.b[norm(o.name)] = o; });
-    const g = new THREE.Group(), id = b.weapon, L = { pistol:0.2, smg:0.36, rifle:0.72, shotgun:0.78, sniper:0.95 }[id];
+    gunFor(b);
+  }
+  function gunFor(b){
+    const A = b.A, g = new THREE.Group(), id = b.weapon, L = { pistol:0.2, smg:0.36, rifle:0.72, shotgun:0.78, sniper:0.95 }[id];
     part(g, STEEL, 0.045, 0.06, L * 0.6, 0, 0.02, L * 0.12); part(g, id === 'rifle' || id === 'shotgun' || id === 'sniper' ? WOOD : PLASTIC, 0.04, 0.09, L * 0.3, 0, -0.01, -L * 0.25); tube(g, DARK, 0.012, L * 0.45, 0, 0.03, L * 0.5); part(g, PLASTIC, 0.03, 0.09, 0.05, 0, -0.06, 0);
     const fl = new THREE.Sprite(FLASH.material); fl.position.set(0, 0.03, L * 0.75); fl.scale.setScalar(0.55); fl.visible = false; g.add(fl); g.userData.fl = fl;
     A.root.add(g); A.gun = g; A.flashT = 0;
@@ -408,35 +419,137 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
       if (hit.t < w.range && d0 < 60) impact(x, y, z, o, !!hit.target);
       if (hit.target) hits.set(hit.target, (hits.get(hit.target) || 0) + R.damageAt(shot.weapon, hit.t, hit.zone));
     });
-    for (const [T, dmg] of hits){ const res = R.applyDamage(T, dmg); T.lastHitBy = b; T.lastHitAt = S.now; if (T === S.me) hurtMe(res.dealt, b); if (res.killed) downed(T, b); }
+    for (const [T, dmg] of hits){ const res = R.applyDamage(T, T === S.me ? dmg : dmg * (S.W.botVsBot || 1)); T.lastHitBy = b; T.lastHitAt = S.now; if (T === S.me) hurtMe(res.dealt, b); if (res.killed) downed(T, b); }
   }
   function hurtMe(dmg, from){
     S.hurtT = 0.45; const a = Math.atan2(from.x - S.me.x, from.z - S.me.z); S.hurtFrom = a; blast(0.3, 0.09, 700, 1); thump(0.3, 130, 0.12);
   }
   function feed(html){ const d = document.createElement('div'); d.innerHTML = html; const f = el('#shFeed'); f.appendChild(d); while (f.children.length > 4) f.firstChild.remove(); setTimeout(() => d.remove(), 5000); }
   function downed(T, by){
-    by.kills = (by.kills || 0) + 1; T.deaths = (T.deaths || 0) + 1;
-    const nm = f => f === S.me ? 'You' : f.name; feed(`${nm(by)} <b>dropped</b> ${nm(T)}`);
+    if (by) by.kills = (by.kills || 0) + 1; T.deaths = (T.deaths || 0) + 1;
+    const nm = f => !f ? 'The zone' : f === S.me ? 'You' : f.name; feed(`${nm(by)} <b>dropped</b> ${nm(T)}`);
     if (by === S.me) elim(T.name);
     else if (T !== S.me && T.meHitAt && S.now - T.meHitAt < 6){ S.assists++; feed('Assist on ' + T.name); }
-    if (T === S.me){ S.deadT = S.team ? 2 : 4; S.deadAge = 0; if (S.team){ T.ry = P.yaw + Math.PI; T.A.root.position.set(P.x, P.y, P.z); T.deadT = 1e9; fall(T, by.x, by.z); } P.frozen = true; S.trigger = false; S.ads = false; el('#shDead').hidden = false; el('#shDeadBy').textContent = `${by.name} got you with the ${W[by.weapon].name.toLowerCase()}`; }
-    else { T.deadT = S.team ? 1e9 : 5 + Math.random() * 2; T.meHitAt = 0; S.stats.kills += by === S.me ? 1 : 0; fall(T, by.x, by.z); }
-    if (S.team) checkRound();
+    if (T === S.me){ S.deadT = S.oneLife ? 2 : 4; S.deadAge = 0; if (S.br) S.br.place = S.W.fighters.filter(f => f.alive).length + 1; if (S.oneLife){ T.ry = P.yaw + Math.PI; T.A.root.position.set(P.x, P.y, P.z); T.deadT = 1e9; fall(T, by ? by.x : T.x + 1, by ? by.z : T.z); } P.frozen = true; S.trigger = false; S.ads = false; el('#shDead').hidden = false; el('#shDeadBy').textContent = by ? `${by.name} got you with the ${W[by.weapon].name.toLowerCase()}` : 'The zone got you'; }
+    else { T.deadT = S.oneLife ? 1e9 : 5 + Math.random() * 2; T.meHitAt = 0; S.stats.kills += by === S.me ? 1 : 0; fall(T, by ? by.x : T.x + 1, by ? by.z : T.z); }
+    if (S.team) checkRound(); else if (S.br) checkBR();
   }
   function tickBots(dt){
     const Wd = botWorld(); let f = S.me; f.x = P.x; f.y = P.y; f.z = P.z; f.stance = S.stance; f.proneYaw = Math.atan2(-Math.sin(P.yaw), -Math.cos(P.yaw)); const m = moveState(); f.speed = m.moving ? (m.running ? 7 : 4.3) : 0;
-    if (S.deadT > 0 && S.team){ S.deadT -= dt; if (S.deadT <= 0) enterSpec(); }
+    if (S.deadT > 0 && S.oneLife){ S.deadT -= dt; if (S.deadT <= 0){ if (S.br && !S.squad) finishBR(); else enterSpec(); } }
     else if (S.deadT > 0){ S.deadT -= dt; if (S.deadT <= 0){ const keep = { kills:f.kills, deaths:f.deaths, w:f.weapon }; const s = farSpot(); S.me = Object.assign(R.newFighter({ weapon:keep.w }), { kills:keep.kills, deaths:keep.deaths, x:s[0], z:s[1] }); Wd.fighters[0] = S.me; P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); P.frozen = false; P.vy = 0; el('#shDead').hidden = true; setStance(0); } }
     for (const b of S.bots){
-      if (!b.alive){ if (!S.team) b.deadT -= dt; if (b.deadT <= 0){ BOTS.respawn(b, farSpot(), Wd); standUp(b); } else { tickFall(b, dt); continue; } }
-      if (S.team && (S.round.freeze > 0 || S.round.over > 0)){ b.speed = 0; b.vx = b.vz = 0; } else BOTS.step(b, dt, Wd);
+      if (!b.alive){ if (!S.oneLife) b.deadT -= dt; if (b.deadT <= 0){ BOTS.respawn(b, farSpot(), Wd); standUp(b); } else { tickFall(b, dt); continue; } }
+      if (held()){ b.speed = 0; b.vx = b.vz = 0; } else BOTS.step(b, dt, Wd);
       b.A.root.position.set(b.x, b.y, b.z); b.A.root.rotation.set(0, b.ry, 0);
       animBody(b, dt);
       if (b.alive){ aimPose(b); const fl = b.A.gun.userData.fl; if (b.A.flashT > 0){ b.A.flashT -= dt; fl.visible = true; } else fl.visible = false; }
     }
-    if (S.team && !f.alive) tickFall(f, dt);
+    if (S.oneLife && !f.alive) tickFall(f, dt);
     if (S.hurtT > 0){ S.hurtT -= dt; el('#shHurt').style.opacity = Math.min(1, S.hurtT * 3); const dd = el('#shDir'); dd.style.opacity = Math.min(1, S.hurtT * 3); dd.style.transform = `rotate(${(P.yaw + Math.PI - S.hurtFrom) * 180 / Math.PI}deg)`; }
     else { el('#shHurt').style.opacity = 0; el('#shDir').style.opacity = 0; }
+  }
+
+  /* ---------------- battle royale: one life, loot the market, stay inside the shrinking zone */
+  const held = () => S.team ? S.round.freeze > 0 || S.round.over > 0 : S.br ? S.br.freeze > 0 : false;
+  const LOOT = [['gun', 'rifle', 5], ['gun', 'smg', 4], ['gun', 'shotgun', 3], ['gun', 'sniper', 2], ['ammo', '', 11], ['armor', '', 8], ['med', '', 9]];
+  function itemMesh(it){
+    const g = new THREE.Group();
+    if (it.kind === 'gun'){ const L = { smg:0.42, rifle:0.8, shotgun:0.82, sniper:1 }[it.weapon]; part(g, STEEL, 0.05, 0.07, L * 0.6, 0, 0, 0); part(g, it.weapon === 'smg' ? PLASTIC : WOOD, 0.045, 0.09, L * 0.3, 0, -0.01, L * 0.42); tube(g, DARK, 0.013, L * 0.45, 0, 0.01, -L * 0.5); if (it.weapon === 'sniper') tube(g, STEEL, 0.026, 0.28, 0, 0.07, 0); }
+    else if (it.kind === 'ammo'){ part(g, mat(0x3d4a2b, 0.8, 0.1), 0.34, 0.2, 0.22, 0, 0, 0); part(g, mat(0xd0a73a, 0.5, 0.6), 0.2, 0.03, 0.06, 0, 0.11, 0); }
+    else if (it.kind === 'armor'){ part(g, mat(0x24406e, 0.8, 0.05), 0.42, 0.5, 0.16, 0, 0, 0); part(g, mat(0x3a8bff, 0.6, 0.1), 0.2, 0.2, 0.17, 0, 0.05, 0); }
+    else { part(g, mat(0xf2f2f2, 0.5, 0), 0.34, 0.24, 0.16, 0, 0, 0); part(g, mat(0xd6201a, 0.5, 0), 0.2, 0.06, 0.17, 0, 0, 0); part(g, mat(0xd6201a, 0.5, 0), 0.06, 0.18, 0.17, 0, 0, 0); }
+    const glow = new THREE.Sprite(ITEMGLOW[it.kind]); glow.scale.setScalar(it.kind === 'gun' ? 1.1 : 0.85); g.add(glow);
+    return g;
+  }
+  const glowM = c => new THREE.SpriteMaterial({ map:glowTex(c, 'rgba(255,255,255,.08)'), transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0.5 });
+  const ITEMGLOW = { gun:glowM('rgba(255,190,70,.55)'), ammo:glowM('rgba(150,220,90,.5)'), armor:glowM('rgba(70,140,255,.6)'), med:glowM('rgba(255,70,60,.5)') };
+  function spreadSpots(n, gap){
+    const out = [], N = nav();
+    for (let i = 0; i < n * 60 && out.length < n; i++){ const p = N.randomSpot(Math.random); if (out.every(q => Math.hypot(p[0] - q[0], p[1] - q[1]) >= gap)) out.push(p); }
+    return out;
+  }
+  function placeLoot(){
+    const list = []; for (const [kind, weapon, n] of LOOT) for (let i = 0; i < n; i++) list.push({ kind, weapon });
+    const spots = spreadSpots(list.length, 5);
+    list.sort(() => Math.random() - 0.5).forEach((it, i) => { const s = spots[i % spots.length]; it.x = s[0] + (i >= spots.length ? 1 : 0); it.z = s[1]; it.y = groundAt(it.x, it.z, 2) + 0.55; });
+    // the best sniper spots: two rifles waiting on rooftops, ladders only
+    S.ladders.slice(0, 3).forEach((L, i) => list.push({ kind:'gun', weapon:'sniper', x:L.inX, z:L.inZ, y:L.top + 0.55 }));
+    for (const it of list){ it.m = itemMesh(it); it.m.position.set(it.x, it.y, it.z); it.m.userData.ph = Math.random() * 6; scene.add(it.m); }
+    S.items = list;
+  }
+  function itemTaken(it, who){
+    it.gone = true; scene.remove(it.m);
+    if (who === S.me){
+      const names = { ammo:'Ammo', armor:'Armour', med:'Medkit' }; elimLine(it.kind === 'gun' ? W[it.weapon].name : names[it.kind]);
+      click(0.2, 2200); if (it.kind === 'gun' && R.BEST.indexOf(it.weapon) < R.BEST.indexOf(S.me.weapon) || (it.kind === 'gun' && W[S.me.weapon].melee)) swap(it.weapon);
+    }
+  }
+  function elimLine(t){ const h = el('#shHint'); h.hidden = false; h.textContent = '+ ' + t; S.hintT = 1.3; }
+  function tickItems(dt){
+    const f = S.me, t = S.now;
+    for (const it of S.items){
+      if (it.gone) continue;
+      it.m.rotation.y += dt * 1.2; it.m.position.y = it.y + Math.sin(t * 2 + it.m.userData.ph) * 0.06;
+      if (f.alive && Math.hypot(it.x - P.x, it.z - P.z) < 1.2 && Math.abs(it.y - 0.55 - P.y) < 1.2 && R.takeItem(f, it)) itemTaken(it, f);
+    }
+    if (S.hintT > 0){ S.hintT -= dt; if (S.hintT <= 0) el('#shHint').hidden = true; }
+  }
+  function regear(b){ const A = b.A; A.root.remove(A.gun); gunFor(b); }
+  const ZONEM = new THREE.MeshBasicMaterial({ color:0x3a6bff, transparent:true, opacity:0.2, side:THREE.DoubleSide, depthWrite:false, fog:false });
+  const ZONEG = new THREE.CylinderGeometry(1, 1, 60, 96, 1, true);
+  function nextCentre(cx, cz, r, nr){
+    const N = nav();
+    for (let i = 0; i < 80; i++){ const a = Math.random() * 6.28, d = Math.random() * Math.max(0, r - nr), x = cx + Math.cos(a) * d, y = cz + Math.sin(a) * d; if (N.isOpen(x, y)) return [x, y]; }
+    return [cx, cz];
+  }
+  function startBR(){
+    const c = LAYOUT.play, mx = (c[0] + c[2]) / 2, mz = (c[1] + c[3]) / 2;
+    const s = S.me; S.W.items = S.items; S.W.onItem = itemTaken; S.W.onGear = regear; S.W.graceUntil = FREEZE + 30;
+    const z = R.makeZone(mx, mz, 112, nextCentre); S.W.zone = z; S.br.zone = z; S.br.freeze = FREEZE; S.br.endIn = 0; S.br.tick = 0; S.br.place = 0;
+    const wall = new THREE.Mesh(ZONEG, ZONEM); wall.renderOrder = 1; scene.add(wall); S.br.wall = wall;
+    let spots;
+    if (S.squad){ pickBases(); spots = [...huddle(S.bases[0], 5), ...huddle(S.bases[1], 5)]; }
+    else spots = spreadSpots(10, 30);
+    s.x = spots[0][0]; s.z = spots[0][1]; P.x = s.x; P.z = s.z; P.y = groundAt(s.x, s.z, 2); s.y = P.y; P.vy = 0; P.frozen = true;
+    P.yaw = Math.atan2(-(mx - s.x), -(mz - s.z)); P.pitch = 0;
+    S.bots.forEach((b, i) => { const p = spots[(i + 1) % spots.length]; b.x = b.lastX = p[0]; b.z = b.lastZ = p[1]; b.y = groundAt(p[0], p[1], 2); b.ry = b.aimYaw = Math.atan2(mx - p[0], mz - p[1]); });
+    banner('Battle royale', S.squad ? 'Last team standing · find weapons fast' : 'Last one standing · find weapons fast');
+  }
+  function tickBR(dt){
+    const B = S.br, Z = B.zone;
+    if (B.freeze > 0){ B.freeze -= dt; if (B.freeze <= 0){ P.frozen = false; banner(); } }
+    else R.zoneTick(Z, dt);
+    // bots start cautious and turn more aggressive as the zone squeezes everyone together
+    S.W.sightMul = [0.45, 0.6, 0.75, 0.9, 1, 1][Z.phase]; S.W.hunt = [0.05, 0.12, 0.25, 0.45, 0.7, 0.9][Z.phase];
+    // pacing: in a map this small bots would finish each other in a minute, so they only thin out as fast as the zone closes
+    const alive = S.W.fighters.filter(f => f.alive).length, keep = [8, 6, 4, 3, 2, 1][Z.phase];
+    S.W.botVsBot = alive <= keep ? 0.02 : [0.14, 0.2, 0.3, 0.5, 0.8, 1][Z.phase];
+    if (B.endIn > 0){ B.endIn -= dt; if (B.endIn <= 0){ finishBR(); return; } }
+    B.wall.position.set(Z.cx, 28, Z.cz); B.wall.scale.set(Z.r, 1, Z.r);
+    const outside = S.me.alive && !R.inZone(Z, P.x, P.z);
+    el('#shZoneWarn').hidden = !outside; el('#shBurn').style.opacity = outside ? 0.8 : 0;
+    B.tick -= dt;
+    if (B.tick <= 0 && B.freeze <= 0){
+      B.tick = 1;
+      for (const f of S.W.fighters){ if (!f.alive || R.inZone(Z, f.x, f.z)) continue; if (R.burn(f, Z.dps)) downed(f, null); else if (f === S.me) blast(0.14, 0.08, 500, 1); }
+    }
+  }
+  function checkBR(){
+    const B = S.br; if (B.endIn > 0 || S.ended) return;
+    const left = S.W.fighters.filter(f => f.alive);
+    const over = S.squad ? !teamOf(0).some(f => f.alive) || !teamOf(1).some(f => f.alive) : left.length <= 1 && S.me.alive;
+    if (over){ B.endIn = 2; B.won = S.squad ? teamOf(0).some(f => f.alive) : S.me.alive; }
+  }
+  function finishBR(){
+    const B = S.br; if (S.ended) return; S.ended = true; setTrigger(false); S.ads = false; P.frozen = true; banner(); el('#shSpec').hidden = true; el('#shDead').hidden = true; el('#shZoneWarn').hidden = true; el('#shBurn').style.opacity = 0;
+    const won = B.endIn >= 0 && (S.squad ? teamOf(0).some(f => f.alive) && !teamOf(1).some(f => f.alive) : S.me.alive), h = el('#shEndT');
+    h.textContent = won ? (S.squad ? 'Your team won' : 'Last one standing') : S.squad ? 'Your team fell' : '#' + B.place + ' of 10'; h.className = won ? 'win' : 'lose';
+    el('#shEndS').textContent = `Battle royale · ${S.squad ? 'Teams' : 'Solo'} · ${S.diff} · you got ${S.me.kills} kill${S.me.kills === 1 ? '' : 's'}`;
+    const all = S.W.fighters.slice().sort((a, b) => (b.kills || 0) - (a.kills || 0));
+    const row = f => `<tr class="${f === S.me ? 'me' : ''}"><td>${f === S.me ? 'You' : f.name}</td><td>${f.kills || 0}</td><td>${f.alive ? 'Alive' : 'Down'}</td></tr>`, tab = l => `<table><tr class="sep"><td>Player</td><td>Kills</td><td></td></tr>${l.map(row).join('')}</table>`;
+    el('#shEndB').innerHTML = `<section>${tab(all.slice(0, 5))}${tab(all.slice(5))}</section>`;
+    el('#shEnd').hidden = false; if (document.pointerLockElement) document.exitPointerLock();
   }
 
   /* ---------------- team battle: rounds with no respawns, first to three wins */
@@ -516,7 +629,9 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     if (document.pointerLockElement) document.exitPointerLock();
   }
   function mapDots(g, M){
-    if (!S.active || !S.team) return;
+    if (!S.active) return;
+    if (S.br){ const Z = S.br.zone, cx = (Z.cx - M.ox) * M.s, cz = (Z.cz - M.oz) * M.s; g.lineWidth = 4; g.strokeStyle = '#6f93ff'; g.beginPath(); g.arc(cx, cz, Z.r * M.s, 0, 6.29); g.stroke(); g.lineWidth = 3; g.strokeStyle = '#ffffff'; g.setLineDash([8, 6]); g.beginPath(); g.arc((Z.nx - M.ox) * M.s, (Z.nz - M.oz) * M.s, Z.nr * M.s, 0, 6.29); g.stroke(); g.setLineDash([]); }
+    if (!S.team && !S.squad) return;
     for (const f of teamOf(0)){ if (f === S.me || !f.alive) continue; g.fillStyle = '#3a8bff'; g.strokeStyle = '#08080b'; g.lineWidth = 3; g.beginPath(); g.arc((f.x - M.ox) * M.s, (f.z - M.oz) * M.s, 8, 0, Math.PI * 2); g.stroke(); g.fill(); }
   }
 
@@ -626,33 +741,38 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   }
   function start(opts = {}){
     if (S.active || !GAME.S.ready) return;
-    S.mode = opts.mode || 'range'; S.diff = opts.diff || 'medium'; S.fight = S.mode !== 'range'; S.team = S.mode === 'team'; S.ended = false; S.spec = null; S.round = null;
+    S.mode = opts.mode || 'range'; S.diff = opts.diff || 'medium'; S.fight = S.mode !== 'range'; S.team = S.mode === 'team'; S.br = S.mode === 'br' ? {} : null; S.squad = !!(S.br && opts.squad); S.oneLife = S.team || !!S.br; S.ended = false; S.spec = null; S.round = null;
     buildHud(); makeFx(); audio(); loadShots();
     const spots = streetSpots(), s = spots[Math.floor(spots.length / 2)];
     P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); P.vy = 0; P.yaw = 0; P.pitch = 0; P.fly = false; P.frozen = false;
-    S.me = Object.assign(R.newFighter({ weapon:'rifle' }), { kills:0, deaths:0, x:P.x, y:P.y, z:P.z }); S.deadT = 0; S.hurtT = 0; S.vx = S.vz = 0; S.stance = 0; S.eyeDrop = 0; S.crouchAt = 0; S.assists = 0; S.climb = null; S.sprintT = 0; S.baseSens = SENS; S.stats = { shots:0, hits:0, heads:0, kills:0 }; S.now = 0; S.ads = false; S.adsT = 0; S.trigger = false; S.pressed = false; S.targets = [];
+    const kit = S.br ? { weapon:'pistol', loadout:['pistol', 'knife'] } : { weapon:'rifle' };
+    S.me = Object.assign(R.newFighter(kit), { kills:0, deaths:0, x:P.x, y:P.y, z:P.z }); S.deadT = 0; S.hurtT = 0; S.vx = S.vz = 0; S.stance = 0; S.eyeDrop = 0; S.crouchAt = 0; S.assists = 0; S.climb = null; S.sprintT = 0; S.baseSens = SENS; S.stats = { shots:0, hits:0, heads:0, kills:0 }; S.now = 0; S.ads = false; S.adsT = 0; S.trigger = false; S.pressed = false; S.targets = [];
     S.bots = [];
     if (S.fight){
       S.W = { fighters:[S.me], near, nav:nav(), groundAt:(x, z, y) => groundAt(x, z, y), rand:Math.random, now:0, onShot:botShot, intel:{} };
       for (let i = 0; i < 9; i++){
-        const s = farSpot(), team = S.team ? (i < 4 ? 0 : 1) : null, b = BOTS.newBot({ id:'b' + i, name:NAMES[i], x:s[0], z:s[1], weapon:ARMS_FOR[i], team }, S.diff);
-        b.y = groundAt(s[0], s[1], 2); b.A = GAME.debug.makeAvatar(S.team ? (team === 0 ? 'task_force' : i % 2 ? 'trader_man' : 'trader_woman') : CHAR_LIST[i % 3]); outfit(b); addBar(b, team === 0); S.bots.push(b); S.W.fighters.push(b);
+        const s = farSpot(), teamed = S.team || S.squad, team = teamed ? (i < 4 ? 0 : 1) : null, b = BOTS.newBot({ id:'b' + i, name:NAMES[i], x:s[0], z:s[1], weapon:S.br ? 'pistol' : ARMS_FOR[i], team, loadout:S.br ? ['pistol'] : undefined }, S.diff);
+        b.y = groundAt(s[0], s[1], 2); b.A = GAME.debug.makeAvatar(teamed ? (team === 0 ? 'task_force' : i % 2 ? 'trader_man' : 'trader_woman') : CHAR_LIST[i % 3]); outfit(b); addBar(b, team === 0); S.bots.push(b); S.W.fighters.push(b);
       }
-      S.targets = S.team ? S.bots.filter(b => b.team === 1) : S.bots;
-      if (S.team){ S.me.team = 0; S.me.A = GAME.debug.makeAvatar('task_force'); S.me.A.b = {}; S.score = [0, 0]; pickBases(); newRound(1); }
+      S.targets = S.team || S.squad ? S.bots.filter(b => b.team === 1) : S.bots;
+      if (S.team || S.squad) S.me.team = 0;
+      if (S.oneLife){ S.me.A = GAME.debug.makeAvatar('task_force'); S.me.A.root.visible = false; S.me.A.b = {}; }
+      if (S.team){ S.score = [0, 0]; pickBases(); newRound(1); }
     } else spawnTargets(spots);
     buildLadders();
+    if (S.br){ placeLoot(); startBR(); }
     MUSIC.stop(); started = true; S.active = true; el('#start').hidden = true; el('#shHud').hidden = false; setPaused(false);
     document.body.classList.add('sh-on'); document.body.classList.toggle('sh-touch', TOUCH);
     el('#shHp').hidden = S.mode !== 'bots'; el('#shDead').hidden = true; el('#shFeed').innerHTML = ''; el('#shHurt').style.opacity = 0;
     if (!TOUCH) canvas.requestPointerLock?.()?.catch?.(() => {});
-    toast(S.team ? 'Your team is in blue. Drop all five Traders' : S.fight ? 'Nine bots dey hunt you. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
+    toast(S.br ? 'Walk over weapons, armour and medkits to grab them. Stay inside the blue wall' : S.team ? 'Your team is in blue. Drop all five Traders' : S.fight ? 'Nine bots dey hunt you. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
   }
   function stop(){
     if (!S.active) return;
     S.active = false; started = false; P.frozen = false; WALK = STAND.WALK; RUN = STAND.RUN; HEAD = R.STANCE[0].height; S.stance = 0; S.eyeDrop = 0; S.crouchAt = 0; SENS = S.baseSens; rig.visible = true; S.scoped = false; el('#shScope').hidden = true; el('#shHint').hidden = true; el('#shElim').style.opacity = 0; camera.rotation.z = 0; clearLadders(); camera.fov = STAND.fov; camera.updateProjectionMatrix();
     for (const T of new Set([...S.targets, ...S.bots, ...(S.me && S.me.A ? [S.me] : [])])){ if (T.fall && T.fall.pool) scene.remove(T.fall.pool); if (T.bar) scene.remove(T.bar.g); scene.remove(T.A.root); } S.targets = []; S.bots = [];
-    S.spec = null; S.ended = false; S.round = null; S.team = false; S.fight = false; banner(); el('#shEnd').hidden = true; el('#shSpec').hidden = true; el('#shDead').hidden = true;
+    for (const it of S.items) if (!it.gone) scene.remove(it.m); S.items = []; if (S.br && S.br.wall) scene.remove(S.br.wall); el('#shZoneWarn').hidden = true; el('#shBurn').style.opacity = 0; el('#shArm').hidden = true;
+    S.spec = null; S.ended = false; S.round = null; S.team = false; S.fight = false; S.br = null; S.squad = false; S.oneLife = false; banner(); el('#shEnd').hidden = true; el('#shSpec').hidden = true; el('#shDead').hidden = true;
     for (const g of [...FX.tr, ...FX.puff]){ g.m.visible = false; g.life = 0; } for (const m of FX.mark) m.visible = false;
     el('#shHud').hidden = true; el('#start').hidden = false; document.body.classList.remove('sh-on', 'sh-touch');
     if (document.pointerLockElement) document.exitPointerLock(); MUSIC.start();
@@ -662,10 +782,11 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     if (S.paused || S.ended){ camera.position.y -= S.eyeDrop; return; }
     S.now += dt; if (S.W) S.W.now = S.now; let f = S.me; const w = W[f.weapon];
     R.tick(f, dt, S.now); tickStance(dt);
-    if (S.team) tickRound(dt);
+    if (S.team) tickRound(dt); else if (S.br) tickBR(dt);
     if (S.ended) return;
     f = S.me;
-    const canShoot = S.sprintT < 0.35 && !S.climb && !(S.team && (S.round.freeze > 0));
+    if (S.br) tickItems(dt);
+    const canShoot = S.sprintT < 0.35 && !S.climb && !(S.fight && (S.team ? S.round.freeze > 0 : S.br ? S.br.freeze > 0 : false));
     if (canShoot && (S.pressed || (S.trigger && w.auto))){
       const fired = shoot();
       if (fired && w.scope) setTimeout(() => { if (S.active){ click(0.2, 1300); setTimeout(() => S.active && click(0.22, 1800), 240); } }, 380);
