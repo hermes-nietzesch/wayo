@@ -1990,18 +1990,40 @@ const GAME = (() => {
     const tp = anim.animations.find(c => c.name === 'TPose');
     if (tp){ const mx = new THREE.AnimationMixer(anim.scene); mx.clipAction(tp).play(); mx.update(0); anim.scene.updateMatrixWorld(true); }
     Object.keys(CHAR_FILES).forEach((name, i) => {
-      const g = gs[i], root = g.scene; lightenModel(root, 512);
-      // compressed models store bone weights as whole numbers; turn them back into 0–1 so CPU-side bone maths (sizing) is right
-      root.traverse(o => { const w = o.isSkinnedMesh && o.geometry.attributes.skinWeight; if (w && w.normalized && !(w.array instanceof Float32Array)){ const d = w.array instanceof Uint16Array ? 65535 : 255, f = new Float32Array(w.array.length); for (let i = 0; i < f.length; i++) f[i] = w.array[i] / d; o.geometry.setAttribute('skinWeight', new THREE.BufferAttribute(f, w.itemSize)); } });
-      root.traverse(o => { if (o.isMesh){ o.castShadow = !GFX.low; o.frustumCulled = false; if (o.material){ o.material.envMapIntensity = 0.7; if (o.material.map) o.material.map.anisotropy = 4; } } });
-      const box = skinnedBox(root), h = box.max.y - box.min.y;
-      S.chars[name] = { root, scale:CHAR_FILES[name] / h, minY:box.min.y };
-      S.clips[name] = {};
+      const g = gs[i], root = g.scene; prepChar(name, root, CHAR_FILES[name]);
       // both skeletons are Mixamo rigs bound in T-pose, so clips map bone for bone
       const posed = THREE.SkeletonUtils.clone(root); matchPose(anim.scene, posed);
       for (const c of anim.animations) if (c.name !== 'TPose') S.clips[name][c.name] = retarget(c, anim.scene, posed);
-      console.log('char', name, 'h', h.toFixed(2), 'scale', S.chars[name].scale.toFixed(3));
     });
+  }
+  function prepChar(name, root, height, built){
+    lightenModel(root, 512);
+    // compressed models store bone weights as whole numbers; turn them back into 0–1 so CPU-side bone maths (sizing) is right
+    root.traverse(o => { const w = o.isSkinnedMesh && o.geometry.attributes.skinWeight; if (w && w.normalized && !(w.array instanceof Float32Array)){ const d = w.array instanceof Uint16Array ? 65535 : 255, f = new Float32Array(w.array.length); for (let i = 0; i < f.length; i++) f[i] = w.array[i] / d; o.geometry.setAttribute('skinWeight', new THREE.BufferAttribute(f, w.itemSize)); } });
+    root.traverse(o => { if (o.isMesh){ o.castShadow = !GFX.low; o.frustumCulled = false; if (o.material){ o.material.envMapIntensity = 0.7; if (o.material.map) o.material.map.anisotropy = 4; } } });
+    // fighters are built 1.8 m tall with their feet at zero; the older characters get measured
+    const box = built ? null : skinnedBox(root), h = built ? 1.8 : box.max.y - box.min.y;
+    S.chars[name] = { root, scale:height / h, minY:built ? 0 : box.min.y };
+    S.clips[name] = {};
+  }
+  // the shooter's rifle animations and finger-rigged fighters load apart from the hide and seek characters, which never need them
+  let rifleSrc = null;
+  async function loadFighters(list){
+    const gl = new THREE.GLTFLoader(); if (window.MeshoptDecoder) gl.setMeshoptDecoder(MeshoptDecoder);
+    const get = f => withRetry((u, ok, bad) => gl.load(u, ok, undefined, bad), 'chars/' + f + '.glb').then(g => { if (!g) throw new Error('could not download ' + f.replace('_', ' ')); return g; });
+    if (!rifleSrc){
+      const g = await get('rifle'), tp = g.animations.find(c => c.name === 'TPose');
+      g.scene.traverse(o => { if (/^mixamorig/.test(o.name)) o.isBone = true; });
+      new THREE.AnimationMixer(g.scene).clipAction(tp).play().getMixer().update(0); g.scene.updateMatrixWorld(true);
+      rifleSrc = g; S.rifle = {};
+    }
+    await Promise.all(Object.keys(list).filter(n => !S.chars[n]).map(async n => prepChar(n, (await get(n)).scene, list[n], true)));
+    for (const name in S.chars){
+      if (S.rifle[name]) continue;
+      const posed = THREE.SkeletonUtils.clone(S.chars[name].root); matchPose(rifleSrc.scene, posed);
+      S.rifle[name] = {};
+      for (const c of rifleSrc.animations) if (c.name !== 'TPose') S.rifle[name][c.name] = retarget(c, rifleSrc.scene, posed);
+    }
   }
   // true bounds of a skinned character: run vertices through their bones (the raw geometry can be in another unit)
   function skinnedBox(root){
@@ -3075,7 +3097,7 @@ const GAME = (() => {
   function quit(){
     clearRound(); S.mode = null; S.phase = 'menu'; S.net = null; hud.end.hidden = true; if (window.VOICE) VOICE.stop(); $('#talkBtn').hidden = true; MUSIC.start(); hud.root.hidden = true; hud.blind.hidden = true; started = false; $('#start').hidden = false; $('#cross').hidden = true;
   }
-  return { init, begin, launch, makeRoster, netMsg, netLeave, netAway, resume, promote, snapshot, setScoreHook:f => { scoreHook = f; }, quit, setBots:n => { CFG.BOTS = Math.max(1, Math.min(9, n | 0)); }, tick, camera:cameraHook, mapBlips, S, countBecome:() => PICK.filter(o => !o.pole).length, debug:{ catchTrader, specNext, PICK, makeAvatar, animateAvatar, playOnce, become, attack, tryBecome, lookTarget, botHide, endRound, CFG, byId, snapshot, doTaunt, talkStart, talkStop } };
+  return { init, begin, launch, makeRoster, netMsg, netLeave, netAway, resume, promote, snapshot, setScoreHook:f => { scoreHook = f; }, quit, setBots:n => { CFG.BOTS = Math.max(1, Math.min(9, n | 0)); }, tick, camera:cameraHook, mapBlips, S, countBecome:() => PICK.filter(o => !o.pole).length, debug:{ catchTrader, specNext, PICK, makeAvatar, loadFighters, animateAvatar, playOnce, become, attack, tryBecome, lookTarget, botHide, endRound, CFG, byId, snapshot, doTaunt, talkStart, talkStop } };
 })();
 window.GAME = GAME;
 
@@ -3682,6 +3704,7 @@ addEventListener('unhandledrejection', e => { if (!window.__ready) showError(e.r
     $('#btnCreate').disabled = $('#btnPractice').disabled = $('#btnRange').disabled = $('#btnBots').disabled = $('#btnTeam').disabled = $('#btnBR').disabled = !GAME.S.ready; if (LOBBY.inRoom()) LOBBY.renderRoom();
     if (GFX.low) renderer.shadowMap.needsUpdate = true;
     window.__ready = true;
+    if (window.SHOOTER) setTimeout(SHOOTER.preload, 800);   // the fighters come down quietly behind the menu
     MUSIC.preload();   // fetch the lobby song only once the game itself is loaded
     requestAnimationFrame(frameLoop);
   } catch (e) { console.error(e); showError(e); }

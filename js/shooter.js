@@ -317,7 +317,13 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     root.hidden = false; draw();
   }
   // start a shooter mode, showing the guide first if this is the player's first time
-  function play(opts){ if (seenTips()) start(opts); else showTips(() => start(opts)); }
+  const FIGHTERS = { zombie_tank:1.85 };
+  let readyP = null;
+  function ready(){ return readyP || (readyP = GAME.debug.loadFighters(FIGHTERS).catch(e => { readyP = null; throw e; })); }
+  function play(opts){
+    const go = () => { if (!GAME.S.ready) return; toast('Getting fighters ready'); ready().then(() => start(opts)).catch(e => { console.warn(e); toast('Could not load the fighters. Check your connection and try again'); }); };
+    if (seenTips()) go(); else showTips(go);
+  }
 
   /* ---------------- stance: tap crouch to duck, hold it to lie flat */
   function roomFor(h){
@@ -383,12 +389,12 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   function streetSpots(){ const pts = []; for (const st of LAYOUT.streets) walkLine(st.pts, 5, (x, z) => { if (inPlay(x, z, -4) && !blockedAt(x, z, 0.7)) pts.push([x, z, st.name]); }); return pts; }
   function clearPath(a, b){ const d = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.ceil(d / 1.2); for (let i = 0; i <= n; i++){ const t = i / n; if (blockedAt(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 0.5)) return false; } return true; }
   function spawnTargets(spots){
-    const dbg = GAME.debug, chars = ['task_force', 'trader_man', 'trader_woman'];
+    const dbg = GAME.debug, chars = ['task_force', 'zombie_tank', 'trader_woman'];
     const home = spots.slice().sort((a, b) => Math.hypot(a[0] - P.x, a[1] - P.z) - Math.hypot(b[0] - P.x, b[1] - P.z));
     const picks = []; for (const s of home){ const d = Math.hypot(s[0] - P.x, s[1] - P.z); if (d < 8 || picks.some(p => Math.hypot(p[0] - s[0], p[1] - s[1]) < 7)) continue; picks.push(s); if (picks.length === 9) break; }
     picks.forEach((s, i) => {
       const T = R.newFighter({ id:'t' + i, x:s[0], z:s[1] }); T.y = groundAt(s[0], s[1], 2); T.ry = Math.random() * 6.28;
-      T.A = dbg.makeAvatar(chars[i % 3]); T.home = [s[0], s[1]];
+      T.A = dbg.makeAvatar(chars[i % 3]); rigUp(T.A); T.home = [s[0], s[1]];
       const other = home.find(o => { const d = Math.hypot(o[0] - s[0], o[1] - s[1]); return d > 7 && d < 18 && clearPath(s, o); });
       T.path = i % 3 !== 2 && other ? [[s[0], s[1]], [other[0], other[1]]] : null; T.leg = 1; T.wait = Math.random() * 2; T.deadT = 0; addBar(T);
       S.targets.push(T);
@@ -453,7 +459,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
 
   /* ---------------- bots: they walk the market, hunt each other and hunt you */
   const NAMES = ['Chidi', 'Bisi', 'Tunde', 'Ngozi', 'Emeka', 'Aisha', 'Musa', 'Funke', 'Segun'];
-  const CHAR_LIST = ['task_force', 'trader_man', 'trader_woman'], ARMS_FOR = ['rifle', 'smg', 'rifle', 'pistol', 'shotgun', 'smg', 'rifle', 'sniper', 'shotgun'];
+  const CHAR_LIST = ['task_force', 'zombie_tank', 'trader_man', 'trader_woman'], ARMS_FOR = ['rifle', 'smg', 'rifle', 'pistol', 'shotgun', 'smg', 'rifle', 'sniper', 'shotgun'];
   let NAV = null;
   function nav(){ return NAV || (NAV = BOTS.makeNav(LAYOUT.play, (x, z) => inPlay(x, z, -1.5) && !blockedAt(x, z, 0.5) && !inFootprint(x, z, 0.15))); }
   function botWorld(){ const w = S.W; w.now = S.now; return w; }
@@ -464,9 +470,26 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   }
   const norm = n => n.replace(/^mixamorig:?/, '').replace(/_\d+$/, '');
   function outfit(b){
-    const A = b.A, want = { RightArm:0, RightForeArm:0, RightHand:0, LeftArm:0, LeftForeArm:0, Spine:0, Spine1:0, Spine2:0 }; A.b = {};
+    const A = b.A, want = { RightHand:0, LeftHand:0, RightHandMiddle1:0, Spine:0, Spine1:0, Spine2:0 }; A.b = {};
     A.inner.traverse(o => { if (o.isBone && norm(o.name) in want) A.b[norm(o.name)] = o; });
-    gunFor(b);
+    rigUp(A); gunFor(b);
+  }
+  // swap the hide and seek moves for the rifle set, and close the fingers round the gun for good
+  function rigUp(A){
+    for (const k in A.acts) A.acts[k].stop();
+    const C = GAME.S.rifle[A.name]; A.r = {}; A.on = {}; A.phase = Math.random();
+    A.inner.traverse(o => { if (o.isBone && norm(o.name) === 'Hips') A.hips = o; });
+    for (const k in C){
+      if (k === 'Grip'){ for (const t of C.Grip.tracks){ const bone = A.inner.getObjectByName(t.name.slice(0, t.name.lastIndexOf('.'))); if (bone) bone.quaternion.fromArray(t.values); } continue; }
+      const a = A.r[k] = A.mixer.clipAction(C[k]);
+      if (/^Die|^JumpUp|^JumpDown/.test(k)){ a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; }
+      else if (!/Idle|Loop/.test(k)) a.timeScale = 0;   // the moving clips are placed by hand so their footsteps stay in step
+    }
+  }
+  // only the clips in use run, which keeps ten fighters cheap on a phone
+  function setOn(A, want){
+    for (const k in A.on) if (!(k in want)){ A.r[k].stop(); delete A.on[k]; }
+    for (const k in want){ const a = A.r[k]; if (!A.on[k]){ a.play(); A.on[k] = 1; } a.setEffectiveWeight(want[k]); }
   }
   function gunFor(b){
     const A = b.A, g = new THREE.Group(), id = b.weapon, L = { pistol:0.2, smg:0.36, rifle:0.72, shotgun:0.78, sniper:0.95 }[id];
@@ -476,54 +499,69 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     const fl = new THREE.Sprite(FLASH.material); fl.position.set(0, 0.03, L * 0.75); fl.scale.setScalar(0.55); fl.visible = false; g.add(fl); g.userData.fl = fl;
     A.root.add(g); A.gun = g; A.flashT = 0;
   }
-  const _q0 = new THREE.Quaternion(), _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _y = new THREE.Vector3(0, 1, 0), _d = new THREE.Vector3(), _c = new THREE.Vector3();
-  const _qa = new THREE.Quaternion(), _yq = new THREE.Quaternion(), _e = new THREE.Euler(0, 0, 0, 'YXZ');
-  // turn one bone so it points along a direction in the character's aiming space (+z forward, +x left)
-  function point(bone, dx, dy, dz){
+  const _q0 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _y = new THREE.Vector3(0, 1, 0), _d = new THREE.Vector3(), _yq = new THREE.Quaternion();
+  const _hl = new THREE.Vector3(), _hr = new THREE.Vector3(), _ax = new THREE.Vector3(), _m = new THREE.Matrix4(), _o = new THREE.Vector3();
+  // turn one spine bone around a world axis on top of the animation
+  function bend(bone, axis, amt){
     if (!bone) return;
-    _d.set(dx, dy, dz).normalize().applyQuaternion(_qa);
-    bone.updateWorldMatrix(true, false); bone.getWorldQuaternion(_q0); _c.copy(_y).applyQuaternion(_q0).normalize();
-    _q1.setFromUnitVectors(_c, _d).multiply(_q0); bone.parent.getWorldQuaternion(_q2).invert(); bone.quaternion.copy(_q2.multiply(_q1));
-  }
-  // twist one spine bone around the vertical, so the chest can face the fight while the legs run another way
-  function twist(bone, amt){
-    if (!bone) return;
-    bone.updateWorldMatrix(true, false); bone.getWorldQuaternion(_q0); _yq.setFromAxisAngle(_y, amt).multiply(_q0); bone.parent.getWorldQuaternion(_q2).invert(); bone.quaternion.copy(_q2.multiply(_yq));
+    bone.updateWorldMatrix(true, false); bone.getWorldQuaternion(_q0); _yq.setFromAxisAngle(axis, amt).multiply(_q0); bone.parent.getWorldQuaternion(_q2).invert(); bone.quaternion.copy(_q2.multiply(_yq));
   }
   const wrapA = a => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
-  // walk and run clips play at the speed the character really moves, so feet don't slide. Backwards plays them in reverse.
+  const clamp01 = v => Math.max(0, Math.min(1, v)), SIDE = ['F', 'L', 'B', 'R'];
+  // blend the two nearest directions of walking, running or crouching, however the fighter is moving against where they face
   function animBody(b, dt){
-    const A = b.A, s = b.speed || 0, w = Math.min(1, s / 0.5), r = Math.max(0, Math.min(1, (s - 2.3) / 0.8)), dir = b.back ? -1 : 1;
-    A.acts.Idle.setEffectiveWeight(1 - w); A.acts.Walk.setEffectiveWeight(w * (1 - r)); A.acts.Run.setEffectiveWeight(w * r);
-    A.acts.Walk.timeScale = dir * Math.max(0.5, s / 1.58); A.acts.Run.timeScale = dir * Math.max(0.6, s / 4.61);
+    const A = b.A, s = b.speed || 0, st = b.stance || 0, yaw = b.aimYaw ?? b.ry, sn = Math.sin(yaw), cs = Math.cos(yaw), vx = b.vx ?? sn * s, vz = b.vz ?? cs * s;
+    const f = vx * sn + vz * cs, l = vx * cs - vz * sn, mv = clamp01(s / 0.5), want = {}, ang = Math.atan2(l, f), q = (ang / (Math.PI / 2) + 4) % 4, i = Math.floor(q), t = q - i;
+    want[['Idle', 'CrouchIdle', 'ProneIdle'][st]] = 1 - mv;
+    const add = (pre, w) => { if (w <= 0.01) return; if (1 - t > 0.01) want[pre + SIDE[i % 4]] = (want[pre + SIDE[i % 4]] || 0) + w * (1 - t); if (t > 0.01) want[pre + SIDE[(i + 1) % 4]] = (want[pre + SIDE[(i + 1) % 4]] || 0) + w * t; };
+    let stride = 1.58;
+    if (mv > 0){
+      if (st === 2){ want[f >= 0 ? 'ProneF' : 'ProneB'] = mv; stride = 0.9; }
+      else if (st === 1){ add('Crouch', mv); stride = 1.67; }
+      else {
+        const r = clamp01((s - 2.2) / 1), sp = Math.abs(ang) < 0.6 ? clamp01((s - 4.3) / 0.5) : 0;
+        add('Walk', mv * (1 - r)); add('Run', mv * r * (1 - sp)); if (sp > 0) want.Sprint = mv * r * sp;
+        stride = 1.58 + (1.97 - 1.58) * r + sp * 0.99;
+      }
+    }
+    setOn(A, want);
+    A.phase = (A.phase + dt * s / stride) % 1;
+    for (const k in want) if (!/Idle/.test(k)){ const a = A.r[k]; a.time = A.phase * a.getClip().duration; }
     A.mixer.update(dt);
   }
-  // hold the gun up on top of the body animation, until real shooting animations go in
+  // the gun sits in the right hand and points through the left, so it follows every pose; the chest tips to the aim and squares up with the target
+  function holdGun(A, r){
+    const B = A.b; if (!B.RightHand || !B.LeftHand || !A.gun) return;
+    (B.RightHandMiddle1 || B.RightHand).updateWorldMatrix(true, false); B.LeftHand.updateWorldMatrix(true, false);
+    B.RightHand.getWorldPosition(_hr); B.LeftHand.getWorldPosition(_hl); r.worldToLocal(_hr); r.worldToLocal(_hl);
+    _d.copy(_hl).sub(_hr).normalize();
+    _m.lookAt(_d, _o, _y); A.gun.quaternion.setFromRotationMatrix(_m); A.gun.position.copy(_hr);
+  }
   function aimPose(b){
-    const A = b.A, B = A.b, r = A.root, tw = Math.max(-1.5, Math.min(1.5, wrapA(b.aimYaw - b.ry))), up = b.state === 'fight' || b.state === 'chase' ? 1 : 0.5, p = Math.tan(Math.max(-0.9, Math.min(0.9, b.aimPitch || 0))) * up;
-    twist(B.Spine, tw * 0.3); twist(B.Spine1, tw * 0.35); twist(B.Spine2, tw * 0.35);
-    _e.set(0, b.aimYaw, 0); _qa.setFromEuler(_e);
-    point(B.RightArm, -0.28, -0.75 + up * 0.25 + p * 0.5, 0.65); point(B.RightForeArm, 0.1, 0.02 - (1 - up) * 0.3 + p, 1);
-    point(B.LeftArm, 0.3, -0.75 + up * 0.25 + p * 0.5, 0.65); point(B.LeftForeArm, -0.42, 0.04 - (1 - up) * 0.3 + p, 1);
-    if (B.RightHand){ B.RightHand.updateWorldMatrix(true, false); B.RightHand.getWorldPosition(_v); A.gun.position.copy(r.worldToLocal(_v)); A.gun.rotation.set(-Math.atan(p) + (up < 1 ? 0.3 : 0), tw, 0, 'YXZ'); }
+    const A = b.A, B = A.b, r = A.root, p = Math.max(-0.9, Math.min(0.9, b.aimPitch || 0)), yaw = b.aimYaw;
+    _ax.set(Math.cos(yaw), 0, -Math.sin(yaw)); bend(B.Spine1, _ax, -p * 0.5); bend(B.Spine2, _ax, -p * 0.5);
+    holdGun(A, r);
+    const err = Math.atan2(_d.x, _d.z);
+    if (Math.abs(err) < 1.3){ bend(B.Spine2, _y, -err); holdGun(A, r); }
   }
   /* ---------------- going down: there is no death animation in the character files, so the body falls under code */
   const POOL = new THREE.CircleGeometry(0.55, 16), POOLM = new THREE.MeshBasicMaterial({ color:0x4a0806, transparent:true, opacity:0.8, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-3 });
   function fall(T, fromX, fromZ){
-    const A = T.A, away = Math.atan2(T.x - fromX, T.z - fromZ), rel = wrapA(away - T.ry);
-    T.fall = { t:0, dir:Math.abs(rel) < Math.PI / 2 ? 1 : -1, roll:(Math.random() - 0.5) * 0.5, landed:false };
-    A.root.rotation.order = 'YXZ'; A.acts.Idle.setEffectiveWeight(1); A.acts.Walk.setEffectiveWeight(0); A.acts.Run.setEffectiveWeight(0); A.mixer.update(0.016);
+    const A = T.A, yaw = T.aimYaw ?? T.ry, rel = wrapA(Math.atan2(T.x - fromX, T.z - fromZ) - yaw), st = T.stance || 0, abs = Math.abs(rel);
+    const k = st === 2 ? 'DieProne' : st === 1 ? 'DieCrouch' : abs < 0.8 ? 'DieBack' : abs > 2.3 ? (Math.random() < 0.35 ? 'DieHead' : 'DieFront') : 'DieRight', a = A.r[k];
+    setOn(A, {}); a.reset(); a.timeScale = 1.25; a.setEffectiveWeight(1); a.play(); A.on[k] = 1;
+    T.fall = { t:0, land:a.getClip().duration / 1.25 * 0.42, landed:false };
   }
   function tickFall(T, dt){
     const F = T.fall, A = T.A; if (!F) return;
-    F.t += dt;
-    const k = Math.min(1, F.t / 0.62), e = k * k * (3 - 2 * k) * (0.7 + 0.3 * k);       // knees go first, then gravity takes over
-    A.root.position.set(T.x, T.y - Math.sin(k * Math.PI) * 0.12 + e * 0.1, T.z);
-    A.root.rotation.set(F.dir * e * 1.52, T.ry, F.roll * e);
-    if (!F.landed && k >= 1){
+    F.t += dt; A.mixer.update(dt);
+    if (A.gun && !F.landed) holdGun(A, A.root);
+    if (T.deadT >= 0.7) A.root.position.set(T.x, T.y, T.z);
+    if (!F.landed && F.t >= F.land){
       F.landed = true; if (A.gun) A.gun.visible = false;
       const d = Math.hypot(T.x - S.me.x, T.z - S.me.z); blast(0.25 / (1 + d / 8), 0.1, 400, 0.8); thump(0.22 / (1 + d / 8), 80, 0.14);
-      const m = new THREE.Mesh(POOL, POOLM); m.rotation.x = -Math.PI / 2; m.position.set(T.x + Math.sin(T.ry) * F.dir * 0.9, T.y + 0.02, T.z + Math.cos(T.ry) * F.dir * 0.9); m.scale.setScalar(0.1); scene.add(m); F.pool = m;
+      const at = A.hips.getWorldPosition(new THREE.Vector3());
+      const m = new THREE.Mesh(POOL, POOLM); m.rotation.x = -Math.PI / 2; m.position.set(at.x, T.y + 0.02, at.z); m.scale.setScalar(0.1); scene.add(m); F.pool = m;
     }
     if (F.pool && F.pool.scale.x < 1) F.pool.scale.setScalar(F.pool.scale.x + dt * 0.9);
     // the body stays down a while, then sinks out of the way before the respawn
@@ -531,7 +569,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   }
   function standUp(T){
     const A = T.A; if (T.fall && T.fall.pool) scene.remove(T.fall.pool); T.fall = null; A.root.rotation.set(0, T.ry, 0); A.root.visible = true; if (A.gun) A.gun.visible = true;
-    if (A.shot){ A.shot.a.stop(); A.shot = null; }
+    setOn(A, {});
   }
   /* ---------------- a health bar over every fighter */
   const BARG = new THREE.PlaneGeometry(1, 1), BARBG = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.55, fog:false, depthWrite:false });
@@ -575,7 +613,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     const nm = f => !f ? 'The zone' : f === S.me ? 'You' : f.name; feed(`${nm(by)} <b>dropped</b> ${nm(T)}`);
     if (by === S.me) elim(T.name);
     else if (T !== S.me && T.meHitAt && S.now - T.meHitAt < 6){ S.assists++; feed('Assist on ' + T.name); }
-    if (T === S.me){ S.deadT = S.oneLife ? 2 : 4; S.deadAge = 0; if (S.br) S.br.place = S.W.fighters.filter(f => f.alive).length + 1; if (S.oneLife){ T.ry = P.yaw + Math.PI; T.A.root.position.set(P.x, P.y, P.z); T.deadT = 1e9; fall(T, by ? by.x : T.x + 1, by ? by.z : T.z); } P.frozen = true; S.trigger = false; S.ads = false; el('#shDead').hidden = false; el('#shDeadBy').textContent = by ? `${by.name} got you with the ${W[by.weapon].name.toLowerCase()}` : 'The zone got you'; }
+    if (T === S.me){ S.deadT = S.oneLife ? 2 : 4; S.deadAge = 0; if (S.br) S.br.place = S.W.fighters.filter(f => f.alive).length + 1; if (S.oneLife){ T.ry = P.yaw + Math.PI; T.A.root.position.set(P.x, P.y, P.z); T.A.root.rotation.set(0, T.ry, 0); T.deadT = 1e9; fall(T, by ? by.x : T.x + 1, by ? by.z : T.z); } P.frozen = true; S.trigger = false; S.ads = false; el('#shDead').hidden = false; el('#shDeadBy').textContent = by ? `${by.name} got you with the ${W[by.weapon].name.toLowerCase()}` : 'The zone got you'; }
     else { T.deadT = S.oneLife ? 1e9 : 5 + Math.random() * 2; T.meHitAt = 0; S.stats.kills += by === S.me ? 1 : 0; fall(T, by ? by.x : T.x + 1, by ? by.z : T.z); }
     if (S.team) checkRound(); else if (S.br) checkBR();
   }
@@ -586,7 +624,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     for (const b of S.bots){
       if (!b.alive){ if (!S.oneLife) b.deadT -= dt; if (b.deadT <= 0){ BOTS.respawn(b, farSpot(), Wd); standUp(b); } else { tickFall(b, dt); continue; } }
       if (held()){ b.speed = 0; b.vx = b.vz = 0; } else BOTS.step(b, dt, Wd);
-      b.A.root.position.set(b.x, b.y, b.z); b.A.root.rotation.set(0, b.ry, 0);
+      b.A.root.position.set(b.x, b.y, b.z); b.A.root.rotation.set(0, b.aimYaw, 0);
       animBody(b, dt);
       if (b.alive){ aimPose(b); const fl = b.A.gun.userData.fl; if (b.A.flashT > 0){ b.A.flashT -= dt; fl.visible = true; } else fl.visible = false; }
     }
@@ -944,11 +982,11 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
       S.W = { fighters:[S.me], near, nav:nav(), groundAt:(x, z, y) => groundAt(x, z, y), rand:Math.random, now:0, onShot:botShot, intel:{} };
       for (let i = 0; i < 9; i++){
         const s = farSpot(), teamed = S.team || S.squad, team = teamed ? (i < 4 ? 0 : 1) : null, b = BOTS.newBot({ id:'b' + i, name:NAMES[i], x:s[0], z:s[1], weapon:S.br ? 'pistol' : ARMS_FOR[i], team, loadout:S.br ? ['pistol'] : undefined }, S.diff);
-        b.y = groundAt(s[0], s[1], 2); b.A = GAME.debug.makeAvatar(teamed ? (team === 0 ? 'task_force' : i % 2 ? 'trader_man' : 'trader_woman') : CHAR_LIST[i % 3]); outfit(b); addBar(b, team === 0); S.bots.push(b); S.W.fighters.push(b);
+        b.y = groundAt(s[0], s[1], 2); b.A = GAME.debug.makeAvatar(teamed ? (team === 0 ? 'task_force' : 'zombie_tank') : CHAR_LIST[i % 4]); outfit(b); addBar(b, team === 0); S.bots.push(b); S.W.fighters.push(b);
       }
       S.targets = S.team || S.squad ? S.bots.filter(b => b.team === 1) : S.bots;
       if (S.team || S.squad) S.me.team = 0;
-      if (S.oneLife){ S.me.A = GAME.debug.makeAvatar('task_force'); S.me.A.root.visible = false; S.me.A.b = {}; }
+      if (S.oneLife){ S.me.A = GAME.debug.makeAvatar('task_force'); rigUp(S.me.A); S.me.A.root.visible = false; S.me.A.b = {}; }
       if (S.team){ S.score = [0, 0]; pickBases(); newRound(1); }
     } else spawnTargets(spots);
     S.ffaT = FFA_TIME; S.ffaEnd = 0;
@@ -958,7 +996,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     document.body.classList.add('sh-on'); document.body.classList.toggle('sh-touch', TOUCH);
     el('#shHp').hidden = !S.fight; el('#shDead').hidden = true; el('#shFeed').innerHTML = ''; el('#shHurt').style.opacity = 0;
     if (!TOUCH) canvas.requestPointerLock?.()?.catch?.(() => {});
-    toast(TOUCH && !S.fight ? 'Drag FIRE to aim and shoot. Push the stick right up to sprint' : S.br ? 'Loot is on shop counters and down the alleys. Stay inside the blue wall' : S.team ? 'Your team is in blue. Drop all five Traders' : S.fight ? 'First to 15 kills wins. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
+    toast(TOUCH && !S.fight ? 'Drag FIRE to aim and shoot. Push the stick right up to sprint' : S.br ? 'Loot is on shop counters and down the alleys. Stay inside the blue wall' : S.team ? 'Your team is in blue. Drop all five on the other side' : S.fight ? 'First to 15 kills wins. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
   }
   function stop(){
     if (!S.active) return;
@@ -1024,7 +1062,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     const k = 1 - Math.exp(-dt * (P.onGround ? 11 : 2.5)); S.vx += (mx - S.vx) * k; S.vz += (mz - S.vz) * k;
     return S.climb ? [0, 0] : [S.vx, S.vz];
   }
-  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, momentum, noJump, setStance, mapDots, play, showTips, HELP, setHelp, loadGunModels, MODEL, regearFor:regear };
+  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, animBodyFor:animBody, fallFor:fall, tickFallFor:tickFall, momentum, noJump, setStance, mapDots, play, showTips, HELP, setHelp, loadGunModels, MODEL, regearFor:regear, preload:() => ready().catch(() => {}) };
 })();
 window.SHOOTER = SHOOTER;
 { const wait = () => (window.__ready ? SHOOTER.loadGunModels() : setTimeout(wait, 300)); wait(); }
