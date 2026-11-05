@@ -212,7 +212,7 @@ body:has(#endCard:not([hidden])) #touch,body:has(#endCard:not([hidden])) #gbtns,
       <div id="v_home" class="view">
         <label class="field"><span>Your name</span><input id="nameIn" maxlength="16" autocomplete="nickname" placeholder="e.g. Tunde"></label>
         <div class="modes"><button id="btnCreate" class="mode" disabled>Create room</button><button id="btnJoin" class="mode">Join room</button></div>
-        <div class="minor"><button id="btnPractice" class="linkish" disabled>Practise with bots</button> <button id="btnRange" class="linkish" disabled>Guns test range</button></div>
+        <div class="minor"><button id="btnPractice" class="linkish" disabled>Practise with bots</button> <button id="btnRange" class="linkish" disabled>Guns test range</button> <button id="btnTips" class="linkish">Controls</button></div>
         <div class="minor"><button id="btnBR" class="linkish" disabled>Battle royale</button> <select id="brIn" aria-label="Battle royale type"><option value="solo">Solo</option><option value="team">Teams</option></select></div>
         <div class="minor"><button id="btnTeam" class="linkish" disabled>Team battle 5v5</button> <button id="btnBots" class="linkish" disabled>Free-for-all</button> <select id="diffIn" aria-label="Bot difficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select></div>
         <p id="homeMsg" class="practice" role="status"></p>
@@ -3545,10 +3545,11 @@ const LOBBY = (() => {
     GAME.setScoreHook(roundOver);
     $('#btnCreate').addEventListener('click', () => createRoom(false));
     $('#btnPractice').addEventListener('click', () => createRoom(true));
-    $('#btnRange').addEventListener('click', () => { saveName(); SHOOTER.start(); });
-    $('#btnBots').addEventListener('click', () => { saveName(); SHOOTER.start({ mode:'bots', diff:$('#diffIn').value }); });
-    $('#btnBR').addEventListener('click', () => { saveName(); SHOOTER.start({ mode:'br', squad:$('#brIn').value === 'team', diff:$('#diffIn').value }); });
-    $('#btnTeam').addEventListener('click', () => { saveName(); SHOOTER.start({ mode:'team', diff:$('#diffIn').value }); });
+    $('#btnRange').addEventListener('click', () => { saveName(); SHOOTER.play(); });
+    $('#btnBots').addEventListener('click', () => { saveName(); SHOOTER.play({ mode:'bots', diff:$('#diffIn').value }); });
+    $('#btnBR').addEventListener('click', () => { saveName(); SHOOTER.play({ mode:'br', squad:$('#brIn').value === 'team', diff:$('#diffIn').value }); });
+    $('#btnTeam').addEventListener('click', () => { saveName(); SHOOTER.play({ mode:'team', diff:$('#diffIn').value }); });
+    $('#btnTips').addEventListener('click', () => SHOOTER.showTips());
     $('#btnJoin').addEventListener('click', () => { saveName(); $('#joinMsg').textContent = ''; homeMsg(''); show('join'); });
     $('#joinGo').addEventListener('click', joinRoom);
     $('#codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });

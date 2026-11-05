@@ -188,6 +188,69 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
       for (const ev of ['pointerup', 'pointercancel']) cb.addEventListener(ev, crouchUp);
     }
   }
+  /* ---------------- first-time guide: what each button does, shown on a small picture of the screen */
+  const TIPS_KEY = 'wayo-tips-v1';
+  const seenTips = () => { try { return !!localStorage.getItem(TIPS_KEY); } catch (e) { return true; } };
+  const markTips = () => { try { localStorage.setItem(TIPS_KEY, '1'); } catch (e) {} };
+  // spots on the mini screen, in percent of its width and height
+  const SPOT = { stick:[11, 78, 13], fire:[92, 68, 9.2], fireL:[6, 53, 5.6], aim:[83.5, 63, 6], rel:[92, 50, 5], cr:[77, 82, 5.4], jump:[83.5, 85, 6.2] };
+  const TOUCH_TIPS = [
+    { on:['stick'], t:'Move', d:'Push the stick to walk. Push it all the way forward to sprint. The ring turns gold.' },
+    { area:true, t:'Look around', d:'Drag your thumb anywhere on the right side of the screen.' },
+    { on:['fire', 'fireL'], t:'Shoot', d:'Hold either fire button to shoot. Drag the button while you hold it to aim and fire together.' },
+    { on:['aim'], t:'Aim', d:'Tap to aim down your sights. On the sniper this opens the scope. Tap again to stop.' },
+    { on:['rel'], t:'Reload', d:'Tap to reload. Your gun also reloads by itself when it runs empty.' },
+    { on:['cr'], t:'Crouch and lie down', d:'Tap to crouch. Press and hold to lie flat. Low stances are harder to spot and steadier to shoot from.' },
+    { on:['jump'], t:'Jump', d:'Tap to jump. If you are crouching or lying down, it gets you up first.' },
+    { slots:true, t:'Swap weapons', d:'Tap a weapon along the bottom. In battle royale you only have what you find, so check shop counters and alleys.' },
+    { area:'ladder', t:'Climb', d:'Walk up to a yellow ladder and push forward to climb onto the roof. That is where the sniper shines.' },
+  ];
+  const KEY_TIPS = [
+    { keys:['W', 'A', 'S', 'D'], t:'Move', d:'Hold Shift to sprint. Space jumps.' },
+    { keys:['Mouse'], t:'Look and shoot', d:'Move the mouse to look. Left click shoots, right click aims. On the sniper, aiming opens the scope.' },
+    { keys:['R'], t:'Reload', d:'Your gun also reloads by itself when it runs empty.' },
+    { keys:['C'], t:'Crouch and lie down', d:'Tap C to crouch. Hold C to lie flat. Low stances are harder to spot and steadier to shoot from.' },
+    { keys:['1', '–', '6'], t:'Swap weapons', d:'Or use the mouse wheel. Q goes back to your last weapon. In battle royale you only have what you find.' },
+    { keys:['W'], t:'Climb', d:'Walk up to a yellow ladder and hold W to climb onto the roof. That is where the sniper shines.' },
+  ];
+  function tipPicture(tip){
+    if (tip.keys) return `<div class="tipKeys">${tip.keys.map(k => `<kbd>${k}</kbd>`).join('')}</div>`;
+    const dots = Object.keys(SPOT).map(k => { const [x, y, r] = SPOT[k]; return `<i class="${tip.on && tip.on.includes(k) ? 'hot' : ''}" style="left:${x}%;top:${y}%;width:${r}%"></i>`; }).join('');
+    return `<div class="tipPhone">${tip.area === true ? '<u></u>' : ''}${tip.area === 'ladder' ? '<s></s>' : ''}${dots}<b class="${tip.slots ? 'hot' : ''}"></b></div>`;
+  }
+  function showTips(done){
+    const list = TOUCH ? TOUCH_TIPS : KEY_TIPS; let i = 0, root = el('#shTips');
+    if (!root){
+      const css = document.createElement('style');
+      css.textContent = `#shTips{position:fixed;inset:0;z-index:60;background:rgba(5,5,8,.93);display:flex;overflow:auto;color:#fff;font:15px/1.35 var(--body);touch-action:pan-y}
+#shTips .tc{margin:auto;width:min(620px,94vw);padding:10px 14px;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;align-items:center}
+#shTips h3{font:400 clamp(20px,6vh,28px)/1.05 var(--display);margin:0 0 6px;color:var(--accent)}#shTips p{margin:0;color:#ddd}
+#shTips .tipN{display:flex;gap:5px;margin:10px 0}#shTips .tipN i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.25)}#shTips .tipN i.on{background:var(--accent)}
+#shTips .tipB{display:flex;gap:8px;align-items:center}#shTips button{background:rgba(255,255,255,.08);border:1.5px solid var(--line);color:#fff;border-radius:7px;padding:9px 14px;font:700 13px/1 var(--body);cursor:pointer}#shTips button.go{background:var(--red);border-color:var(--red)}#shTips button.ln{background:none;border:0;color:var(--muted);padding:9px 4px;margin-left:auto}
+.tipPhone{position:relative;width:100%;aspect-ratio:844/390;border:2px solid rgba(255,255,255,.3);border-radius:12px;background:linear-gradient(#55708c,#39424c 55%,#26282c);overflow:hidden}
+.tipPhone i{position:absolute;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(0,0,0,.22)}.tipPhone i.hot{border-color:#fff;background:var(--red);box-shadow:0 0 0 4px rgba(225,32,26,.35)}
+.tipPhone b{position:absolute;left:50%;bottom:4%;width:26%;height:8%;transform:translateX(-50%);border-radius:3px;border:1px solid rgba(255,255,255,.35)}.tipPhone b.hot{background:var(--red);border-color:#fff;box-shadow:0 0 0 4px rgba(225,32,26,.35)}
+.tipPhone u{position:absolute;right:0;top:0;bottom:0;width:50%;background:rgba(225,32,26,.32);border-left:1.5px dashed #fff}.tipPhone s{position:absolute;left:47%;top:8%;bottom:30%;width:6%;background:repeating-linear-gradient(#f2c230 0 3px,transparent 3px 9px);border-left:2px solid #f2c230;border-right:2px solid #f2c230}
+.tipKeys{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}.tipKeys kbd{min-width:46px;padding:12px 10px;text-align:center;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.4);border-bottom-width:4px;border-radius:8px;font:800 17px/1 var(--body)}`;
+      document.head.appendChild(css);
+      root = document.createElement('div'); root.id = 'shTips'; root.setAttribute('role', 'dialog'); root.setAttribute('aria-label', 'How to play'); document.body.appendChild(root);
+    }
+    const close = () => { markTips(); root.hidden = true; root.onpointerdown = root.onpointerup = null; if (done) done(); };
+    const draw = () => {
+      const tip = list[i], last = i === list.length - 1;
+      root.innerHTML = `<div class="tc"><div>${tipPicture(tip)}</div><div><h3>${tip.t}</h3><p>${tip.d}</p><div class="tipN">${list.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div><div class="tipB">${i ? '<button id="tipBack">Back</button>' : ''}<button class="go" id="tipNext">${last ? (done ? 'Start' : 'Done') : 'Next'}</button>${last ? '' : '<button class="ln" id="tipSkip">Skip</button>'}</div></div></div>`;
+      el('#tipNext').onclick = () => { if (last) close(); else { i++; draw(); } };
+      if (i) el('#tipBack').onclick = () => { i--; draw(); };
+      if (!last) el('#tipSkip').onclick = close;
+    };
+    let sx = null;   // swipe left and right to move through the cards
+    root.onpointerdown = e => { sx = e.clientX; };
+    root.onpointerup = e => { if (sx === null) return; const d = e.clientX - sx; sx = null; if (Math.abs(d) < 50) return; if (d < 0 && i < list.length - 1){ i++; draw(); } else if (d > 0 && i > 0){ i--; draw(); } };
+    root.hidden = false; draw();
+  }
+  // start a shooter mode, showing the guide first if this is the player's first time
+  function play(opts){ if (seenTips()) start(opts); else showTips(() => start(opts)); }
+
   /* ---------------- stance: tap crouch to duck, hold it to lie flat */
   function roomFor(h){
     for (const C of near(P.x, P.z)){ if (C.ramp) continue; const [lx, lz] = local(C, P.x, P.z); if (Math.abs(lx) < C.hw + RAD && Math.abs(lz) < C.hd + RAD && C.y0 > P.y + 0.3 && C.y0 < P.y + h) return false; }
@@ -884,6 +947,6 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     const k = 1 - Math.exp(-dt * (P.onGround ? 11 : 2.5)); S.vx += (mx - S.vx) * k; S.vz += (mz - S.vz) * k;
     return S.climb ? [0, 0] : [S.vx, S.vz];
   }
-  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, momentum, noJump, setStance, mapDots };
+  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, momentum, noJump, setStance, mapDots, play, showTips };
 })();
 window.SHOOTER = SHOOTER;
