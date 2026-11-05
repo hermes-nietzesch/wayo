@@ -547,7 +547,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     // bots start cautious and turn more aggressive as the zone squeezes everyone together
     S.W.sightMul = [0.45, 0.6, 0.75, 0.9, 1, 1][Z.phase]; S.W.hunt = [0.05, 0.12, 0.25, 0.45, 0.7, 0.9][Z.phase];
     // pacing: in a map this small bots would finish each other in a minute, so they only thin out as fast as the zone closes
-    const alive = S.W.fighters.filter(f => f.alive).length, keep = [8, 6, 4, 3, 2, 1][Z.phase]; S.W.truce = alive <= keep;
+    const alive = S.W.fighters.filter(f => f.alive).length, keep = [9, 8, 7, 6, 5, 1][Z.phase]; S.W.truce = alive <= keep;
     if (B.endIn > 0){ B.endIn -= dt; if (B.endIn <= 0){ finishBR(); return; } }
     B.wall.position.set(Z.cx, 28, Z.cz); B.wall.scale.set(Z.r, 1, Z.r);
     const outside = S.me.alive && !R.inZone(Z, P.x, P.z);
