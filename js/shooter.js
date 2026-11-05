@@ -119,24 +119,34 @@ body.sh-on #cross,body.sh-on #gbtns{display:none!important}
 #shFloat span.head{color:#ff3b2f;font-size:23px}
 #shPause{position:absolute;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;pointer-events:auto;z-index:2}
 #shPause div{text-align:center}#shPause h2{font:400 28px/1 var(--display);margin:0 0 14px}#shPause button,#shExit{background:rgba(8,8,11,.75);border:1.5px solid var(--line);color:#fff;border-radius:7px;padding:11px 18px;font:700 14px/1 var(--body);margin:0 5px;cursor:pointer}#shPause button.go{background:var(--red);border-color:var(--red)}
-#shCrouch{width:62px;height:62px;right:calc(env(safe-area-inset-right,0px) + 216px);bottom:calc(env(safe-area-inset-bottom,0px) + 128px);font-size:10px!important}#shCrouch[aria-pressed="true"]{background:var(--red)}
+#shCrouch{width:46px;height:46px;right:calc(env(safe-area-inset-right,0px) + 170px);bottom:calc(env(safe-area-inset-bottom,0px) + 48px)}#shCrouch[aria-pressed="true"]{background:rgba(225,32,26,.55)}
 #shStance{display:block;font:700 12px/1 var(--body);letter-spacing:.08em;color:#fff;margin-bottom:5px;text-transform:uppercase}
-#shExit{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);right:calc(env(safe-area-inset-right,0px) + 122px);pointer-events:auto;padding:8px 12px;font-size:12px}
+#shExit{position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);right:calc(env(safe-area-inset-right,0px) + 122px);pointer-events:auto;padding:5px 9px;font-size:11px;background:rgba(0,0,0,.25);border-color:rgba(255,255,255,.3)}
 #shTouch{position:absolute;inset:0;pointer-events:none}
-#shTouch button{position:absolute;pointer-events:auto;border-radius:50%;background:rgba(8,8,11,.5);border:2px solid rgba(255,255,255,.45);color:#fff;font:400 12px/1 var(--display);touch-action:none;-webkit-user-select:none;user-select:none}
-#shFire{width:104px;height:104px;right:calc(env(safe-area-inset-right,0px) + 26px);bottom:calc(env(safe-area-inset-bottom,0px) + 110px);background:rgba(225,32,26,.5)!important;border-color:var(--accent)!important}
-#shFireL{width:64px;height:64px;left:calc(env(safe-area-inset-left,0px) + 30px);bottom:calc(env(safe-area-inset-bottom,0px) + 188px);background:rgba(225,32,26,.4)!important}
-#shAim{width:66px;height:66px;right:calc(env(safe-area-inset-right,0px) + 142px);bottom:calc(env(safe-area-inset-bottom,0px) + 168px)}#shAim[aria-pressed="true"]{background:var(--red)}
-#shRel{width:60px;height:60px;right:calc(env(safe-area-inset-right,0px) + 146px);bottom:calc(env(safe-area-inset-bottom,0px) + 92px)}
-body.sh-on.sh-touch #shAmmo{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 56px);right:auto;left:calc(env(safe-area-inset-left,0px) + 14px);text-align:left}
-body.sh-on.sh-touch #shAmmo b{font-size:30px}
+#shTouch button{position:absolute;pointer-events:auto;border-radius:50%;padding:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.22);border:1.5px solid rgba(255,255,255,.38);color:rgba(255,255,255,.9);touch-action:none;-webkit-user-select:none;user-select:none}
+#shTouch button svg{width:56%;height:56%;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+#shFire{width:78px;height:78px;right:calc(env(safe-area-inset-right,0px) + 26px);bottom:calc(env(safe-area-inset-bottom,0px) + 84px);background:rgba(225,32,26,.3)!important;border-color:rgba(255,90,80,.7)!important}
+#shFireL{width:48px;height:48px;left:calc(env(safe-area-inset-left,0px) + 26px);bottom:calc(env(safe-area-inset-bottom,0px) + 158px);background:rgba(225,32,26,.2)!important;border-color:rgba(255,90,80,.5)!important}
+#shAim{width:50px;height:50px;right:calc(env(safe-area-inset-right,0px) + 114px);bottom:calc(env(safe-area-inset-bottom,0px) + 118px)}#shAim[aria-pressed="true"]{background:rgba(225,32,26,.55)}
+#shRel{width:42px;height:42px;right:calc(env(safe-area-inset-right,0px) + 44px);bottom:calc(env(safe-area-inset-bottom,0px) + 172px)}
+body.sh-on.sh-touch #tRun{display:none!important}body.sh-on #where{visibility:hidden}
+body.sh-on.sh-touch #tJump{--r:112px;--b:32px;--s:52px;width:52px!important;height:52px!important;right:calc(env(safe-area-inset-right,0px) + 112px)!important;bottom:calc(env(safe-area-inset-bottom,0px) + 32px)!important;background:rgba(0,0,0,.22)!important;border:1.5px solid rgba(255,255,255,.38)!important;font-size:0!important;position:absolute;margin:0}
+body.sh-on.sh-touch #tJump:after{content:"";position:absolute;left:50%;top:50%;width:13px;height:13px;margin:-4px 0 0 -7px;border-left:2.5px solid #fff;border-top:2.5px solid #fff;transform:rotate(45deg)}
+body.sh-on.sh-touch #stick{left:calc(env(safe-area-inset-left,0px) + 34px)!important;bottom:calc(env(safe-area-inset-bottom,0px) + 28px)!important;width:112px!important;height:112px!important;background:rgba(0,0,0,.14)!important;border-color:rgba(255,255,255,.26)!important}
+body.sh-on.sh-touch #knob{opacity:.55}body.sh-on.sh-touch #stick.sprint{border-color:rgba(255,190,70,.9)!important}
+body.sh-on.sh-touch #shSlots{bottom:calc(env(safe-area-inset-bottom,0px) + 6px);gap:3px}
+body.sh-on.sh-touch #shSlots button{min-width:44px;height:27px;border-radius:5px;font-size:9px;padding:1px 3px;background:rgba(0,0,0,.26);border-color:rgba(255,255,255,.2)}
+body.sh-on.sh-touch #shSlots button[aria-pressed="true"]{background:rgba(225,32,26,.42);border-color:rgba(255,90,80,.7)}
+body.sh-on.sh-touch #shAmmo{right:auto;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 38px);transform:translateX(-50%);text-align:center;white-space:nowrap}
+body.sh-on.sh-touch #shAmmo b{display:inline;font-size:19px}body.sh-on.sh-touch #shAmmo b small{font-size:12px}body.sh-on.sh-touch #shAmmo span{display:none}body.sh-on.sh-touch #shStance{display:inline;margin-right:8px;font-size:10px}
+body.sh-on.sh-touch #shStats{font-size:10px;padding:3px 8px;top:calc(env(safe-area-inset-top,0px) + 6px);background:rgba(8,8,11,.3);max-width:50vw;overflow:hidden;text-overflow:ellipsis}
 #shHp{position:absolute;left:calc(env(safe-area-inset-left,0px) + 24px);bottom:calc(env(safe-area-inset-bottom,0px) + 20px);width:190px;text-shadow:0 1px 3px #000}
 #shHp span{display:block;font:400 26px/1 var(--display);margin-bottom:5px}#shHp div{height:8px;background:rgba(0,0,0,.55);border-radius:3px;overflow:hidden}#shHp i{display:block;height:100%;background:#3fbf5f;width:100%}#shHp.low i{background:var(--accent)}#shHp.low span{color:var(--accent)}
-body.sh-on.sh-touch #shHp{left:calc(env(safe-area-inset-left,0px) + 120px);top:calc(env(safe-area-inset-top,0px) + 58px);bottom:auto;width:110px}body.sh-on.sh-touch #shHp span{font-size:18px}
+body.sh-on.sh-touch #shHp{left:calc(env(safe-area-inset-left,0px) + 12px);top:calc(env(safe-area-inset-top,0px) + 8px);bottom:auto;width:96px}body.sh-on.sh-touch #shHp span{font-size:14px;margin-bottom:2px}body.sh-on.sh-touch #shHp div{height:5px}
 #shHurt{position:absolute;inset:0;opacity:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(190,16,10,.75) 100%)}
 #shDir{position:absolute;left:50%;top:50%;width:0;height:0;opacity:0}#shDir i{position:absolute;left:-46px;top:-150px;width:92px;height:22px;border-top:5px solid #ff3b2f;border-radius:50%;box-shadow:0 -2px 6px rgba(255,40,30,.7)}
 #shFeed{position:absolute;right:calc(env(safe-area-inset-right,0px) + 14px);top:calc(env(safe-area-inset-top,0px) + 196px);text-align:right;font-size:12px;text-shadow:0 1px 2px #000}#shFeed div{background:rgba(8,8,11,.5);padding:3px 8px;border-radius:5px;margin-top:3px}#shFeed b{color:var(--accent)}
-body.sh-on.sh-touch #shFeed{top:calc(env(safe-area-inset-top,0px) + 58px);right:calc(env(safe-area-inset-right,0px) + 122px)}
+body.sh-on.sh-touch #shFeed{top:calc(env(safe-area-inset-top,0px) + 8px);left:calc(env(safe-area-inset-left,0px) + 118px);right:auto;text-align:left;font-size:10px}
 #shDead{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(60,0,0,.45);text-align:center}#shDead b{display:block;font:400 34px/1 var(--display);color:var(--accent);margin-bottom:8px}
 #shScope{position:absolute;inset:0;background:radial-gradient(circle at center,transparent 0 33vh,#000 33.4vh)}#shScope:before,#shScope:after{content:"";position:absolute;background:rgba(0,0,0,.85)}#shScope:before{left:50%;top:calc(50% - 33vh);bottom:calc(50% - 33vh);width:1px}#shScope:after{top:50%;left:calc(50% - 33vh);right:calc(50% - 33vh);height:1px}
 #shElim{position:absolute;left:50%;top:32%;transform:translateX(-50%);font:400 24px/1 var(--display);color:#fff;text-shadow:0 2px 6px #000;opacity:0;transition:opacity .25s;white-space:nowrap}#shElim b{color:var(--accent);font-weight:400}
@@ -152,7 +162,7 @@ body.sh-on #streetName,body.sh-on #coords{display:none}`;
     const d = document.createElement('div'); d.id = 'shHud'; d.hidden = true;
     d.innerHTML = `<div id="shX"><i class="u"></i><i class="d"></i><i class="l"></i><i class="r"></i></div><div id="shHit"></div><div id="shFloat"></div>
 <div id="shScope" hidden></div><div id="shBanner" hidden><b></b><span></span></div><div id="shSpec" hidden><span>Watching <b id="shSpecName"></b></span><button id="shSpecNext">Next</button></div><div id="shEnd" hidden><div><h2 id="shEndT"></h2><p id="shEndS"></p><div id="shEndB"></div><div class="row"><button class="go" id="shAgain">Play again</button><button id="shEndMenu">Back to menu</button></div></div></div><div id="shElim"></div><div id="shHint" hidden></div><div id="shBurn"></div><div id="shZoneWarn" hidden>Outside the zone. Move!</div><div id="shHurt"></div><div id="shDir"><i></i></div><div id="shFeed"></div><div id="shHp" hidden><span id="shHpN">100</span><div><i id="shHpBar"></i></div><div id="shArm" hidden><i id="shArmBar"></i></div></div><div id="shDead" hidden><div><b>You don fall</b><span id="shDeadBy"></span></div></div><div id="shStats"></div><div id="shReload" hidden><i></i></div><div id="shAmmo"><i id="shStance" hidden></i><b id="shMag"></b><span id="shName"></span></div><div id="shSlots"></div>
-${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFireL" aria-label="Fire">FIRE</button><button id="shAim" aria-pressed="false">AIM</button><button id="shRel">RELOAD</button><button id="shCrouch" aria-pressed="false">CROUCH</button></div><button id="shExit">Exit</button>' : ''}
+${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v6M12 16v6M2 12h6M16 12h6"/></svg></button><button id="shFireL" aria-label="Fire"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v6M12 16v6M2 12h6M16 12h6"/></svg></button><button id="shAim" aria-pressed="false" aria-label="Aim"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg></button><button id="shRel" aria-label="Reload"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 3v5h-5"/></svg></button><button id="shCrouch" aria-pressed="false" aria-label="Crouch, hold to lie down"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/><path d="M5 19h14"/></svg></button></div><button id="shExit">Exit</button>' : ''}
 <div id="shPause" hidden><div><h2>Paused</h2><button class="go" id="shResume">Keep shooting</button><button id="shQuit">Back to menu</button></div></div>`;
     document.body.appendChild(d);
     const sl = el('#shSlots');
@@ -188,7 +198,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     if (n < S.stance && !roomFor(R.STANCE[n].height)){ toast('No room to get up here', 1200); return false; }
     S.stance = n; HEAD = R.STANCE[n].height; blast(0.06, 0.08, 500, 0.8);
     const lab = el('#shStance'); lab.hidden = !n; lab.textContent = R.STANCE[n].name === 'prone' ? 'Lying down' : 'Crouching';
-    if (TOUCH){ const c = el('#shCrouch'); c.setAttribute('aria-pressed', String(!!n)); c.textContent = n === 2 ? 'PRONE' : 'CROUCH'; }
+    if (TOUCH){ const c = el('#shCrouch'); c.setAttribute('aria-pressed', String(!!n)); c.style.transform = n === 2 ? 'scale(1.12)' : ''; }
     return true;
   }
   const canDuck = () => S.active && !S.paused && S.me.alive && !S.climb && P.onGround;
@@ -204,6 +214,8 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     S.eyeDrop += (R.STANCE[0].eye - R.STANCE[S.stance].eye - S.eyeDrop) * Math.min(1, dt * (S.stance === 2 ? 7 : 12));
     camera.position.y -= S.eyeDrop;
     // reaching for sprint gets you back on your feet
+    // on phones, pushing the stick all the way forward is sprint, like the big mobile shooters
+    if (TOUCH){ const sprint = !S.stance && !S.climb && stick.y < -0.82; P.run = sprint; const st = el('#stick'); if (st) st.classList.toggle('sprint', sprint); }
     const run = !!(P.run || keys.ShiftLeft || keys.ShiftRight); if (run && !S.runWas && S.stance) setStance(0); S.runWas = run;
   }
   function noJump(){ if (!S.active || !S.stance) return false; keys.Space = false; setStance(S.stance - 1); return true; }   // jump stands you up first
@@ -805,13 +817,13 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     if (S.br){ placeLoot(); startBR(); }
     MUSIC.stop(); started = true; S.active = true; el('#start').hidden = true; el('#shHud').hidden = false; setPaused(false);
     document.body.classList.add('sh-on'); document.body.classList.toggle('sh-touch', TOUCH);
-    el('#shHp').hidden = S.mode !== 'bots'; el('#shDead').hidden = true; el('#shFeed').innerHTML = ''; el('#shHurt').style.opacity = 0;
+    el('#shHp').hidden = !S.fight; el('#shDead').hidden = true; el('#shFeed').innerHTML = ''; el('#shHurt').style.opacity = 0;
     if (!TOUCH) canvas.requestPointerLock?.()?.catch?.(() => {});
-    toast(S.br ? 'Loot is on shop counters and down the alleys. Stay inside the blue wall' : S.team ? 'Your team is in blue. Drop all five Traders' : S.fight ? 'First to 15 kills wins. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
+    toast(TOUCH && !S.fight ? 'Drag FIRE to aim and shoot. Push the stick right up to sprint' : S.br ? 'Loot is on shop counters and down the alleys. Stay inside the blue wall' : S.team ? 'Your team is in blue. Drop all five Traders' : S.fight ? 'First to 15 kills wins. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
   }
   function stop(){
     if (!S.active) return;
-    S.active = false; started = false; P.frozen = false; WALK = STAND.WALK; RUN = STAND.RUN; HEAD = R.STANCE[0].height; S.stance = 0; S.eyeDrop = 0; S.crouchAt = 0; SENS = S.baseSens; rig.visible = true; S.scoped = false; el('#shScope').hidden = true; el('#shHint').hidden = true; el('#shElim').style.opacity = 0; camera.rotation.z = 0; clearLadders(); camera.fov = STAND.fov; camera.updateProjectionMatrix();
+    S.active = false; started = false; P.frozen = false; WALK = STAND.WALK; RUN = STAND.RUN; if (TOUCH) P.run = false; HEAD = R.STANCE[0].height; S.stance = 0; S.eyeDrop = 0; S.crouchAt = 0; SENS = S.baseSens; rig.visible = true; S.scoped = false; el('#shScope').hidden = true; el('#shHint').hidden = true; el('#shElim').style.opacity = 0; camera.rotation.z = 0; clearLadders(); camera.fov = STAND.fov; camera.updateProjectionMatrix();
     for (const T of new Set([...S.targets, ...S.bots, ...(S.me && S.me.A ? [S.me] : [])])){ if (T.fall && T.fall.pool) scene.remove(T.fall.pool); if (T.bar) scene.remove(T.bar.g); scene.remove(T.A.root); } S.targets = []; S.bots = [];
     for (const it of S.items) if (!it.gone) scene.remove(it.m); S.items = []; if (S.br && S.br.wall) scene.remove(S.br.wall); el('#shZoneWarn').hidden = true; el('#shBurn').style.opacity = 0; el('#shArm').hidden = true;
     S.spec = null; S.ended = false; S.round = null; S.team = false; S.fight = false; S.br = null; S.squad = false; S.oneLife = false; banner(); el('#shEnd').hidden = true; el('#shSpec').hidden = true; el('#shDead').hidden = true;
