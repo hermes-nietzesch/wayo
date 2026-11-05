@@ -12,8 +12,8 @@ const SHOOTER = (() => {
   /* ---------------- first-person gun, drawn after the world so it never pokes through walls */
   const vmScene = new THREE.Scene(), vmCam = new THREE.PerspectiveCamera(46, 1, 0.01, 10), rig = new THREE.Group();
   rig.scale.setScalar(0.72);
-  vmScene.add(rig, new THREE.HemisphereLight(0xf2f5ff, 0x5a4a3c, 1.5));
-  const vmSun = new THREE.DirectionalLight(0xfff1dc, 2.2); vmSun.position.set(1, 2, 1.2); vmScene.add(vmSun);
+  vmScene.add(rig, new THREE.HemisphereLight(0xf2f5ff, 0x5a4a3c, 0.8));
+  const vmSun = new THREE.DirectionalLight(0xfff1dc, 1.5); vmSun.position.set(1, 2, 1.2); vmScene.add(vmSun);
   const mat = (c, r = 0.55, m = 0.5) => new THREE.MeshStandardMaterial({ color:new THREE.Color(c).convertSRGBToLinear(), roughness:r, metalness:m });
   const STEEL = mat(0x24262a, 0.42, 0.75), DARK = mat(0x121316, 0.6, 0.4), WOOD = mat(0x6a3d1e, 0.6, 0.05), PLASTIC = mat(0x1d2024, 0.75, 0.1), SKIN = mat(0x5b3a26, 0.75, 0), SLEEVE = mat(0x2c3138, 0.9, 0), BLADE = mat(0xc4cad0, 0.25, 0.9);
   function part(g, m, sx, sy, sz, x, y, z, rx = 0){ const b = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m); b.position.set(x, y, z); b.rotation.x = rx; g.add(b); return b; }
@@ -27,6 +27,31 @@ const SHOOTER = (() => {
     sniper(g){ part(g, WOOD, 0.05, 0.07, 0.62, 0, -0.005, -0.05); part(g, WOOD, 0.045, 0.1, 0.22, 0, -0.03, 0.33, 0.14); tube(g, DARK, 0.011, 0.5, 0, 0.04, -0.6); tube(g, STEEL, 0.024, 0.3, 0, 0.098, -0.1); part(g, DARK, 0.018, 0.03, 0.05, 0, 0.065, -0.2); part(g, DARK, 0.018, 0.03, 0.05, 0, 0.065, 0.0); part(g, STEEL, 0.012, 0.012, 0.05, 0.035, 0.04, 0.07); g.userData.tip = -0.86; arm(g, 0, -0.1, 0.13); arm(g, -0.015, -0.05, -0.32, 0.3); },
     knife(g){ const b = part(g, BLADE, 0.012, 0.04, 0.24, 0, 0.0, -0.17); b.scale.y = 0.9; part(g, DARK, 0.036, 0.05, 0.03, 0, -0.002, -0.04); part(g, PLASTIC, 0.03, 0.04, 0.13, 0, -0.002, 0.04); g.userData.tip = -0.3; arm(g, 0, -0.03, 0.05); },
   };
+  /* real gun models (CC0, 3DModelsCC0). grip says where the hand goes on each model; sight is how high the iron sights sit above it. */
+  const FIT = { rifle:{ grip:[0, -0.115, 0.284], sight:0.083 }, smg:{ grip:[0, -0.11, 0.17], sight:0.09 }, pistol:{ grip:[0, -0.015, 0.015], sight:0.062, trim:0.06 }, shotgun:{ grip:[0, -0.085, 0.43], sight:0.082 }, sniper:{ grip:[0, -0.07, 0.23], sight:0.1, tilt:-0.214 } };
+  const MODEL = {};
+  function modelFor(id){   // a copy of the gun with the hand at the origin and the muzzle towards -z
+    const src = MODEL[id]; if (!src) return null;
+    const g = new THREE.Group(), m = src.root.clone(true), F = FIT[id];
+    m.position.sub(_v.set(F.grip[0], F.grip[1], F.grip[2])); if (F.tilt){ const w = new THREE.Group(); w.rotation.x = F.tilt; w.add(m); g.add(w); } else g.add(m);
+    g.userData.tip = src.tip; return g;
+  }
+  function useModel(id){
+    const old = GM[id], m = modelFor(id); if (!old || !m) return;
+    for (const c of [...old.children]) old.remove(c);        // drop the box gun and box arms, real arms come with the character models
+    old.add(m); old.userData.tip = m.userData.tip; old.userData.sight = FIT[id].sight;
+  }
+  function loadGunModels(){
+    const gl = new THREE.GLTFLoader(); if (window.MeshoptDecoder) gl.setMeshoptDecoder(MeshoptDecoder);
+    for (const id in FIT) gl.load(`guns/${id}.glb`, g => {
+      if (typeof lightenModel === 'function') lightenModel(g.scene, 512);
+      const F = FIT[id], root = g.scene; root.updateMatrixWorld(true);
+      if (F.trim){ const drop = []; root.traverse(o => { if (o.isMesh && new THREE.Box3().setFromObject(o).getCenter(_v).z > F.trim) drop.push(o); }); drop.forEach(o => o.parent.remove(o)); }
+      root.traverse(o => { if (o.isMesh){ o.material.envMapIntensity = 1.1; o.castShadow = false; o.frustumCulled = false; } });
+      const b = new THREE.Box3().setFromObject(root);
+      MODEL[id] = { root, tip:(b.min.z - F.grip[2]) * Math.cos(F.tilt || 0) }; useModel(id);
+    }, undefined, () => {});
+  }
   const GM = {};
   for (const id in GUNS){ const g = new THREE.Group(); GUNS[id](g); g.visible = false; rig.add(g); GM[id] = g; }
   function glowTex(inner, outer){ const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 1, 32, 32, 31); r.addColorStop(0, inner); r.addColorStop(0.35, outer); r.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); }
@@ -445,7 +470,9 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   }
   function gunFor(b){
     const A = b.A, g = new THREE.Group(), id = b.weapon, L = { pistol:0.2, smg:0.36, rifle:0.72, shotgun:0.78, sniper:0.95 }[id];
-    part(g, STEEL, 0.045, 0.06, L * 0.6, 0, 0.02, L * 0.12); part(g, id === 'rifle' || id === 'shotgun' || id === 'sniper' ? WOOD : PLASTIC, 0.04, 0.09, L * 0.3, 0, -0.01, -L * 0.25); tube(g, DARK, 0.012, L * 0.45, 0, 0.03, L * 0.5); part(g, PLASTIC, 0.03, 0.09, 0.05, 0, -0.06, 0);
+    const model = modelFor(id);
+    if (model){ model.rotation.y = Math.PI; g.add(model); }
+    else { part(g, STEEL, 0.045, 0.06, L * 0.6, 0, 0.02, L * 0.12); part(g, id === 'rifle' || id === 'shotgun' || id === 'sniper' ? WOOD : PLASTIC, 0.04, 0.09, L * 0.3, 0, -0.01, -L * 0.25); tube(g, DARK, 0.012, L * 0.45, 0, 0.03, L * 0.5); part(g, PLASTIC, 0.03, 0.09, 0.05, 0, -0.06, 0); }
     const fl = new THREE.Sprite(FLASH.material); fl.position.set(0, 0.03, L * 0.75); fl.scale.setScalar(0.55); fl.visible = false; g.add(fl); g.userData.fl = fl;
     A.root.add(g); A.gun = g; A.flashT = 0;
   }
@@ -591,7 +618,9 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   const LOOT = [['gun', 'rifle', 5], ['gun', 'smg', 4], ['gun', 'shotgun', 3], ['gun', 'sniper', 2], ['ammo', '', 11], ['armor', '', 8], ['med', '', 9]];
   function itemMesh(it){
     const g = new THREE.Group();
-    if (it.kind === 'gun'){ const L = { smg:0.42, rifle:0.8, shotgun:0.82, sniper:1 }[it.weapon]; part(g, STEEL, 0.05, 0.07, L * 0.6, 0, 0, 0); part(g, it.weapon === 'smg' ? PLASTIC : WOOD, 0.045, 0.09, L * 0.3, 0, -0.01, L * 0.42); tube(g, DARK, 0.013, L * 0.45, 0, 0.01, -L * 0.5); if (it.weapon === 'sniper') tube(g, STEEL, 0.026, 0.28, 0, 0.07, 0); }
+    const model = it.kind === 'gun' && modelFor(it.weapon);
+    if (model){ model.rotation.z = 0.25; model.position.y = -0.1; g.add(model); }
+    else if (it.kind === 'gun'){ const L = { smg:0.42, rifle:0.8, shotgun:0.82, sniper:1 }[it.weapon]; part(g, STEEL, 0.05, 0.07, L * 0.6, 0, 0, 0); part(g, it.weapon === 'smg' ? PLASTIC : WOOD, 0.045, 0.09, L * 0.3, 0, -0.01, L * 0.42); tube(g, DARK, 0.013, L * 0.45, 0, 0.01, -L * 0.5); if (it.weapon === 'sniper') tube(g, STEEL, 0.026, 0.28, 0, 0.07, 0); }
     else if (it.kind === 'ammo'){ part(g, mat(0x3d4a2b, 0.8, 0.1), 0.34, 0.2, 0.22, 0, 0, 0); part(g, mat(0xd0a73a, 0.5, 0.6), 0.2, 0.03, 0.06, 0, 0.11, 0); }
     else if (it.kind === 'armor'){ part(g, mat(0x24406e, 0.8, 0.05), 0.42, 0.5, 0.16, 0, 0, 0); part(g, mat(0x3a8bff, 0.6, 0.1), 0.2, 0.2, 0.17, 0, 0.05, 0); }
     else { part(g, mat(0xf2f2f2, 0.5, 0), 0.34, 0.24, 0.16, 0, 0, 0); part(g, mat(0xd6201a, 0.5, 0), 0.2, 0.06, 0.17, 0, 0, 0); part(g, mat(0xd6201a, 0.5, 0), 0.06, 0.18, 0.17, 0, 0, 0); }
@@ -807,12 +836,16 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     const rel = R.reloading(f, S.now) ? Math.sin(Math.PI * Math.min(1, 1 - (f.reloadAt - S.now) / W[f.reloadId].reload)) : 0;
     const sw = S.now < f.swapAt ? (f.swapAt - S.now) / 0.32 : 0;
     const a = S.adsT;
-    rig.position.set(0.19 - a * 0.1 + Math.cos(S.bob * 0.5) * amp, -0.135 - a * 0.012 + Math.abs(Math.sin(S.bob * 0.5)) * amp - rel * 0.1 - sw * 0.28, -0.62 - a * 0.06 + S.vKick * (w.pellets > 1 ? 0.09 : 0.04));
-    rig.rotation.set(S.vKick * 0.05 * (w.pellets > 1 ? 2.2 : 1) + rel * 0.9, 0.05 * (1 - a), S.vKick * S.vRoll * 0.04 + rel * 0.35);
+    const real = g.userData.sight !== undefined, hipX = real ? 0.14 : 0.19, hipY = real ? -0.125 : -0.135, hipZ = real ? -0.34 : -0.62, adsY = real ? -g.userData.sight : -0.147;
+    rig.scale.setScalar(real ? 1 : 0.72);
+    rig.position.set(hipX * (1 - a) + (real ? 0 : a * 0.09) + Math.cos(S.bob * 0.5) * amp, hipY + (adsY - hipY) * a + Math.abs(Math.sin(S.bob * 0.5)) * amp - rel * 0.1 - sw * 0.28, hipZ - a * 0.05 + S.vKick * (w.pellets > 1 ? 0.09 : 0.04));
+    rig.rotation.set(S.vKick * 0.05 * (w.pellets > 1 ? 2.2 : 1) + rel * 0.9 + (real ? 0.03 * (1 - a) : 0), (real ? 0.07 : 0.05) * (1 - a), S.vKick * S.vRoll * 0.04 + rel * 0.35);
     rig.position.y -= (S.stance === 2 ? 0.03 : 0) * (1 - a); rig.rotation.z += S.stance === 2 && !S.ads ? 0.1 : 0;
     const sp = S.sprintT; rig.position.x -= sp * 0.08; rig.position.y -= sp * 0.07; rig.rotation.x -= sp * 0.25; rig.rotation.y += sp * 0.75; rig.rotation.z += sp * 0.2 + Math.sin(S.stepPhase) * sp * 0.05;
     if (w.melee && S.swing > 0){ S.swing = Math.max(0, S.swing - dt * 4); const t = Math.sin(S.swing * Math.PI); rig.rotation.x = -t * 0.5; rig.rotation.y = t * 0.8; rig.position.x -= t * 0.2; rig.position.z -= t * 0.18; }
     if (S.flashT > 0){ S.flashT -= dt; FLASH.visible = true; FLASH.position.set(0, 0.03, g.userData.tip - 0.05); FLASH.scale.setScalar((id === 'shotgun' ? 0.42 : 0.28) * (0.8 + Math.random() * 0.5)); FLASH.material.rotation = Math.random() * 6; } else FLASH.visible = false;
+    if (!vmScene.environment && scene.environment) vmScene.environment = scene.environment;
+    vmCam.near = real ? 0.01 + a * 0.3 : 0.01;   // when aiming, the near edge cuts away the stock that would otherwise fill your view
     vmCam.aspect = camera.aspect; vmCam.updateProjectionMatrix();
   }
   function drawCross(dt){
@@ -991,9 +1024,10 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     const k = 1 - Math.exp(-dt * (P.onGround ? 11 : 2.5)); S.vx += (mx - S.vx) * k; S.vz += (mz - S.vz) * k;
     return S.climb ? [0, 0] : [S.vx, S.vz];
   }
-  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, momentum, noJump, setStance, mapDots, play, showTips, HELP, setHelp };
+  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, momentum, noJump, setStance, mapDots, play, showTips, HELP, setHelp, loadGunModels, MODEL, regearFor:regear };
 })();
 window.SHOOTER = SHOOTER;
+{ const wait = () => (window.__ready ? SHOOTER.loadGunModels() : setTimeout(wait, 300)); wait(); }
 // aim settings on the menu are for phones only
 if (TOUCH){
   const q = s => document.querySelector(s), H = SHOOTER.HELP;
