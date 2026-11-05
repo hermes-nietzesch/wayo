@@ -25,6 +25,12 @@
   const SWAP_TIME = 0.32, BLOOM_DECAY = 0.07;
   const MOVE_SPREAD = 0.012, RUN_SPREAD = 0.03, AIR_SPREAD = 0.05;
   const PLAYER = { hp:100, radius:0.3, bodyTop:1.42, headTop:1.78 };
+  // standing, crouching, lying down: eye height, how tall you are, move speed and how steady your aim is
+  const STANCE = [
+    { name:'stand',  eye:1.62, height:1.78, speed:1,    steady:1,    aimAt:1.15 },
+    { name:'crouch', eye:1.05, height:1.22, speed:0.55, steady:0.75, aimAt:0.8 },
+    { name:'prone',  eye:0.36, height:0.5,  speed:0.24, steady:0.5,  aimAt:0.2 },
+  ];
 
   function newFighter(o = {}) {
     const ammo = {};
@@ -57,7 +63,7 @@
   // how far off-centre a shot can land, in radians
   function spreadOf(f, s = {}) {
     const w = WEAPONS[f.weapon];
-    return (s.ads ? w.ads : w.hip) + f.bloom + (s.airborne ? AIR_SPREAD : s.running ? RUN_SPREAD : s.moving ? MOVE_SPREAD : 0) * (s.ads ? 0.6 : 1);
+    return ((s.ads ? w.ads : w.hip) + f.bloom + (s.airborne ? AIR_SPREAD : s.running ? RUN_SPREAD : s.moving ? MOVE_SPREAD : 0) * (s.ads ? 0.6 : 1)) * STANCE[s.stance || 0].steady;
   }
   // uses one round and returns the direction of each pellet, or null if the gun can't fire
   function fire(f, dir, s, now, rand) {
@@ -114,7 +120,18 @@
     return best;
   }
   function hitboxes(t) {
-    const r = PLAYER.radius, y = t.y || 0;
+    const r = PLAYER.radius, y = t.y || 0, st = t.stance || 0;
+    if (st === 1) return [
+      { zone:'head', cx:t.x, cz:t.z, hw:0.15, hd:0.15, y0:y + 0.92, y1:y + 1.22 },
+      { zone:'body', cx:t.x, cz:t.z, hw:r, hd:r, y0:y, y1:y + 0.92 },
+    ];
+    if (st === 2) {   // lying down: a long low box along the way you are facing, head at the front
+      const a = t.proneYaw || 0, sx = Math.sin(a), cx = Math.cos(a);
+      return [
+        { zone:'head', cx:t.x + sx * 0.72, cz:t.z + cx * 0.72, hw:0.15, hd:0.16, y0:y, y1:y + 0.34 },
+        { zone:'body', cx:t.x - sx * 0.2, cz:t.z - cx * 0.2, c:cx, s:sx, hw:0.27, hd:0.78, y0:y, y1:y + 0.3 },
+      ];
+    }
     return [
       { zone:'head', cx:t.x, cz:t.z, hw:0.15, hd:0.15, y0:y + PLAYER.bodyTop, y1:y + PLAYER.headTop },
       { zone:'body', cx:t.x, cz:t.z, hw:r, hd:r, y0:y, y1:y + PLAYER.bodyTop },
@@ -144,5 +161,5 @@
     }
     return best;
   }
-  return { WEAPONS, ORDER, PLAYER, newFighter, canFire, reloading, startReload, switchWeapon, tick, spreadOf, fire, damageAt, applyDamage, rayBox, rayWorld, hitboxes, traceShot, knifeTrace };
+  return { WEAPONS, ORDER, PLAYER, STANCE, newFighter, canFire, reloading, startReload, switchWeapon, tick, spreadOf, fire, damageAt, applyDamage, rayBox, rayWorld, hitboxes, traceShot, knifeTrace };
 });

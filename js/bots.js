@@ -14,7 +14,7 @@
     hard:   { react:[0.25, 0.45], err:0.055, settle:0.7, sight:48, pause:[0.25, 0.6], burst:[4, 7], strafe:1, retreat:0.8 },
   };
   // speeds in metres a second. They match the walk and run animations, so feet stay planted instead of sliding.
-  const STRAFE = 2.0, JOG = 3.3, RUN = 4.8, RADIUS = 0.36, EYE = 1.55, CHEST = 1.15, PERSONAL = 1.5;
+  const STRAFE = 2.0, JOG = 3.3, RUN = 4.8, RADIUS = 0.36, EYE = 1.55, PERSONAL = 1.5;
   const LIKES = { pistol:15, smg:13, rifle:24, shotgun:7, sniper:42 };
   const wrap = a => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
 
@@ -101,8 +101,9 @@
     return b;
   }
   const rng = (r, [a, b]) => a + r() * (b - a);
+  const aimAt = t => R.STANCE[t.stance || 0].aimAt;
   function sees(b, t, W) {
-    const o = [b.x, b.y + EYE, b.z], dx = t.x - o[0], dy = t.y + CHEST - o[1], dz = t.z - o[2], l = Math.hypot(dx, dy, dz);
+    const o = [b.x, b.y + EYE, b.z], dx = t.x - o[0], dy = t.y + aimAt(t) - o[1], dz = t.z - o[2], l = Math.hypot(dx, dy, dz);
     if (l < 1e-3) return true;
     return R.rayWorld(o, [dx / l, dy / l, dz / l], l, W.near) >= l - 0.2;
   }
@@ -112,7 +113,8 @@
     for (const t of W.fighters) {
       if (t === b || !t.alive || (b.team !== null && b.team === t.team)) continue;
       const dx = t.x - b.x, dz = t.z - b.z, d = Math.hypot(dx, dz);
-      if (d > b.diff.sight) continue;
+      const wasHit = b.lastHitBy === t && W.now - b.lastHitAt < 2.5;
+      if (d > b.diff.sight * (wasHit ? 1 : [1, 0.8, 0.55][t.stance || 0])) continue;   // low targets are harder to spot
       const inView = d < 5 || (dx * fx + dz * fz) / (d || 1) > -0.15 || (b.lastHitBy === t && W.now - b.lastHitAt < 2.5);
       if (!inView) continue;
       const score = d - (t === b.target ? 8 : 0);
@@ -163,7 +165,7 @@
   }
   function aimAndFire(b, dt, W) {
     const t = b.target; if (!t || !t.alive) return;
-    const o = [b.x, b.y + EYE, b.z], tx = t.x, ty = t.y + CHEST - 0.1, tz = t.z, dx = tx - o[0], dy = ty - o[1], dz = tz - o[2], hd = Math.hypot(dx, dz);
+    const o = [b.x, b.y + EYE, b.z], tx = t.x, ty = t.y + aimAt(t) - (t.stance ? 0 : 0.1), tz = t.z, dx = tx - o[0], dy = ty - o[1], dz = tz - o[2], hd = Math.hypot(dx, dz);
     b.aimWant = Math.atan2(dx, dz); b.aimPitch = Math.atan2(dy, hd); b.trackT += dt;
     if (Math.abs(wrap(b.aimWant - b.aimYaw)) > 0.3) return;   // still turning towards the target
     if (W.now < b.reactAt) return;

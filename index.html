@@ -1594,7 +1594,7 @@ function updateInner(dt){
     const g = groundAt(P.x, P.z, P.y);
     if (P.onGround && g < P.y && P.y - g < STEP + 0.05 && P.vy <= 0) P.y = g;   // walk down steps and ramps smoothly
   }
-  if ((keys.Space || jumpReq) && P.onGround && !P.frozen){ P.vy = JUMP; P.onGround = false; }
+  if ((keys.Space || jumpReq) && P.onGround && !P.frozen && !(window.SHOOTER && SHOOTER.noJump())){ P.vy = JUMP; P.onGround = false; }
   jumpReq = false;
   P.vy -= GRAV * dt; P.y += P.vy * dt;
   // ceilings

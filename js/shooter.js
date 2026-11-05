@@ -7,7 +7,7 @@ const SHOOTER = (() => {
   const R = window.WAYO_RULES, W = R.WEAPONS, BOTS = window.WAYO_BOTS;
   const el = s => document.querySelector(s);
   const S = { active:false, now:0, me:null, targets:[], trigger:false, pressed:false, ads:false, adsT:0, paused:false,
-    pitchDebt:0, recoverDebt:0, vKick:0, vRoll:0, swing:0, bob:0, flashT:0, hitT:0, stats:null, last:'pistol', mode:'range', diff:'medium', bots:[], W:null, deadT:0, hurtT:0, vx:0, vz:0, stepPhase:0, stepSide:1, sprintT:0, land:0, wasGround:true, assists:0, ladders:[], climb:null, boltAt:0, baseSens:1 };
+    pitchDebt:0, recoverDebt:0, vKick:0, vRoll:0, swing:0, bob:0, flashT:0, hitT:0, stats:null, last:'pistol', mode:'range', diff:'medium', bots:[], W:null, deadT:0, hurtT:0, vx:0, vz:0, stepPhase:0, stepSide:1, sprintT:0, land:0, wasGround:true, assists:0, stance:0, eyeDrop:0, crouchAt:0, crouchHeld:false, runWas:false, ladders:[], climb:null, boltAt:0, baseSens:1 };
 
   /* ---------------- first-person gun, drawn after the world so it never pokes through walls */
   const vmScene = new THREE.Scene(), vmCam = new THREE.PerspectiveCamera(46, 1, 0.01, 10), rig = new THREE.Group();
@@ -119,6 +119,8 @@ body.sh-on #cross,body.sh-on #gbtns{display:none!important}
 #shFloat span.head{color:#ff3b2f;font-size:23px}
 #shPause{position:absolute;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;pointer-events:auto;z-index:2}
 #shPause div{text-align:center}#shPause h2{font:400 28px/1 var(--display);margin:0 0 14px}#shPause button,#shExit{background:rgba(8,8,11,.75);border:1.5px solid var(--line);color:#fff;border-radius:7px;padding:11px 18px;font:700 14px/1 var(--body);margin:0 5px;cursor:pointer}#shPause button.go{background:var(--red);border-color:var(--red)}
+#shCrouch{width:62px;height:62px;right:calc(env(safe-area-inset-right,0px) + 216px);bottom:calc(env(safe-area-inset-bottom,0px) + 128px);font-size:10px!important}#shCrouch[aria-pressed="true"]{background:var(--red)}
+#shStance{display:block;font:700 12px/1 var(--body);letter-spacing:.08em;color:#fff;margin-bottom:5px;text-transform:uppercase}
 #shExit{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);right:calc(env(safe-area-inset-right,0px) + 122px);pointer-events:auto;padding:8px 12px;font-size:12px}
 #shTouch{position:absolute;inset:0;pointer-events:none}
 #shTouch button{position:absolute;pointer-events:auto;border-radius:50%;background:rgba(8,8,11,.5);border:2px solid rgba(255,255,255,.45);color:#fff;font:400 12px/1 var(--display);touch-action:none;-webkit-user-select:none;user-select:none}
@@ -143,8 +145,8 @@ body.sh-on #streetName,body.sh-on #coords{display:none}`;
     document.head.appendChild(css);
     const d = document.createElement('div'); d.id = 'shHud'; d.hidden = true;
     d.innerHTML = `<div id="shX"><i class="u"></i><i class="d"></i><i class="l"></i><i class="r"></i></div><div id="shHit"></div><div id="shFloat"></div>
-<div id="shScope" hidden></div><div id="shElim"></div><div id="shHint" hidden></div><div id="shHurt"></div><div id="shDir"><i></i></div><div id="shFeed"></div><div id="shHp" hidden><span id="shHpN">100</span><div><i id="shHpBar"></i></div></div><div id="shDead" hidden><div><b>You don fall</b><span id="shDeadBy"></span></div></div><div id="shStats"></div><div id="shReload" hidden><i></i></div><div id="shAmmo"><b id="shMag"></b><span id="shName"></span></div><div id="shSlots"></div>
-${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFireL" aria-label="Fire">FIRE</button><button id="shAim" aria-pressed="false">AIM</button><button id="shRel">RELOAD</button></div><button id="shExit">Exit</button>' : ''}
+<div id="shScope" hidden></div><div id="shElim"></div><div id="shHint" hidden></div><div id="shHurt"></div><div id="shDir"><i></i></div><div id="shFeed"></div><div id="shHp" hidden><span id="shHpN">100</span><div><i id="shHpBar"></i></div></div><div id="shDead" hidden><div><b>You don fall</b><span id="shDeadBy"></span></div></div><div id="shStats"></div><div id="shReload" hidden><i></i></div><div id="shAmmo"><i id="shStance" hidden></i><b id="shMag"></b><span id="shName"></span></div><div id="shSlots"></div>
+${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFireL" aria-label="Fire">FIRE</button><button id="shAim" aria-pressed="false">AIM</button><button id="shRel">RELOAD</button><button id="shCrouch" aria-pressed="false">CROUCH</button></div><button id="shExit">Exit</button>' : ''}
 <div id="shPause" hidden><div><h2>Paused</h2><button class="go" id="shResume">Keep shooting</button><button id="shQuit">Back to menu</button></div></div>`;
     document.body.appendChild(d);
     const sl = el('#shSlots');
@@ -162,8 +164,40 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
       el('#shAim').addEventListener('pointerdown', e => { e.preventDefault(); S.ads = !S.ads; el('#shAim').setAttribute('aria-pressed', String(S.ads)); });
       el('#shRel').addEventListener('pointerdown', e => { e.preventDefault(); reload(); });
       el('#shExit').addEventListener('click', stop);
+      const cb = el('#shCrouch');   // tap to crouch, long-press to lie down
+      cb.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); crouchDown(); });
+      for (const ev of ['pointerup', 'pointercancel']) cb.addEventListener(ev, crouchUp);
     }
   }
+  /* ---------------- stance: tap crouch to duck, hold it to lie flat */
+  function roomFor(h){
+    for (const C of near(P.x, P.z)){ if (C.ramp) continue; const [lx, lz] = local(C, P.x, P.z); if (Math.abs(lx) < C.hw + RAD && Math.abs(lz) < C.hd + RAD && C.y0 > P.y + 0.3 && C.y0 < P.y + h) return false; }
+    return true;
+  }
+  function setStance(n){
+    if (n === S.stance || !S.active) return true;
+    if (n < S.stance && !roomFor(R.STANCE[n].height)){ toast('No room to get up here', 1200); return false; }
+    S.stance = n; HEAD = R.STANCE[n].height; blast(0.06, 0.08, 500, 0.8);
+    const lab = el('#shStance'); lab.hidden = !n; lab.textContent = R.STANCE[n].name === 'prone' ? 'Lying down' : 'Crouching';
+    if (TOUCH){ const c = el('#shCrouch'); c.setAttribute('aria-pressed', String(!!n)); c.textContent = n === 2 ? 'PRONE' : 'CROUCH'; }
+    return true;
+  }
+  const canDuck = () => S.active && !S.paused && S.me.alive && !S.climb && P.onGround;
+  function crouchDown(){ if (canDuck()){ S.crouchAt = S.now || 0.001; S.crouchHeld = false; } }
+  function crouchUp(){
+    if (!S.crouchAt) return; S.crouchAt = 0;
+    if (!S.crouchHeld && canDuck()) setStance(S.stance === 1 ? 0 : 1);   // a quick tap from flat gets you to a crouch
+    S.crouchHeld = false;
+  }
+  function tickStance(dt){
+    if (S.crouchAt && !S.crouchHeld && S.now - S.crouchAt >= 0.35){ S.crouchHeld = true; if (canDuck()) setStance(2); }
+    if (S.climb && S.stance) setStance(0);
+    S.eyeDrop += (R.STANCE[0].eye - R.STANCE[S.stance].eye - S.eyeDrop) * Math.min(1, dt * (S.stance === 2 ? 7 : 12));
+    camera.position.y -= S.eyeDrop;
+    // reaching for sprint gets you back on your feet
+    const run = !!(P.run || keys.ShiftLeft || keys.ShiftRight); if (run && !S.runWas && S.stance) setStance(0); S.runWas = run;
+  }
+  function noJump(){ if (!S.active || !S.stance) return false; keys.Space = false; setStance(S.stance - 1); return true; }   // jump stands you up first
   function setPaused(v){ S.paused = v; el('#shPause').hidden = !v; if (v) setTrigger(false); }
   function drawHud(){
     const f = S.me, w = W[f.weapon], a = f.ammo[f.weapon];
@@ -215,7 +249,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   /* ---------------- shooting */
   const eye = () => [camera.position.x, camera.position.y, camera.position.z];
   function aimDir(){ camera.getWorldDirection(_v); return [_v.x, _v.y, _v.z]; }
-  function moveState(){ const moving = !!(keys.KeyW || keys.KeyA || keys.KeyS || keys.KeyD || keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight || Math.hypot(stick.x, stick.y) > 0.15); return { ads:S.ads, moving, running:moving && !!(P.run || keys.ShiftLeft || keys.ShiftRight), airborne:!P.onGround }; }
+  function moveState(){ const moving = !!(keys.KeyW || keys.KeyA || keys.KeyS || keys.KeyD || keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight || Math.hypot(stick.x, stick.y) > 0.15); return { ads:S.ads, moving, running:moving && !S.stance && !!(P.run || keys.ShiftLeft || keys.ShiftRight), airborne:!P.onGround, stance:S.stance }; }
   function hurt(T, hit, id){
     const dmg = R.damageAt(id, hit.t, hit.zone), res = R.applyDamage(T, dmg); S.stats.hits++; if (hit.zone === 'head') S.stats.heads++;
     return { dmg, killed:res.killed };
@@ -243,7 +277,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     if (hits > 1) S.stats.hits -= hits - 1;   // a shotgun blast counts as one hit on the score line
     for (const [T, e] of tally){ const sum = e.list.reduce((a, b) => a + b.d, 0), head = e.list.some(h => h.head); report(T, [{ d:sum, head, at:e.list[0].at }], e.killed); }
     S.vKick = 1; S.vRoll = (Math.random() - 0.5); S.flashT = 0.045;
-    S.pitchDebt += w.kick * (S.ads ? 0.6 : 1); P.yaw += (Math.random() - 0.5) * w.kick * 0.5;
+    const steady = R.STANCE[S.stance].steady; S.pitchDebt += w.kick * (S.ads ? 0.6 : 1) * steady; P.yaw += (Math.random() - 0.5) * w.kick * 0.5 * steady;
     return true;
   }
   function report(T, parts, killed){
@@ -375,8 +409,8 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     else { T.deadT = 5 + Math.random() * 2; T.meHitAt = 0; S.stats.kills += by === S.me ? 1 : 0; fall(T, by.x, by.z); }
   }
   function tickBots(dt){
-    const Wd = botWorld(); let f = S.me; f.x = P.x; f.y = P.y; f.z = P.z; const m = moveState(); f.speed = m.moving ? (m.running ? 7 : 4.3) : 0;
-    if (S.deadT > 0){ S.deadT -= dt; if (S.deadT <= 0){ const keep = { kills:f.kills, deaths:f.deaths, w:f.weapon }; const s = farSpot(); S.me = Object.assign(R.newFighter({ weapon:keep.w }), { kills:keep.kills, deaths:keep.deaths, x:s[0], z:s[1] }); Wd.fighters[0] = S.me; P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); P.frozen = false; P.vy = 0; el('#shDead').hidden = true; } }
+    const Wd = botWorld(); let f = S.me; f.x = P.x; f.y = P.y; f.z = P.z; f.stance = S.stance; f.proneYaw = Math.atan2(-Math.sin(P.yaw), -Math.cos(P.yaw)); const m = moveState(); f.speed = m.moving ? (m.running ? 7 : 4.3) : 0;
+    if (S.deadT > 0){ S.deadT -= dt; if (S.deadT <= 0){ const keep = { kills:f.kills, deaths:f.deaths, w:f.weapon }; const s = farSpot(); S.me = Object.assign(R.newFighter({ weapon:keep.w }), { kills:keep.kills, deaths:keep.deaths, x:s[0], z:s[1] }); Wd.fighters[0] = S.me; P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); P.frozen = false; P.vy = 0; el('#shDead').hidden = true; setStance(0); } }
     for (const b of S.bots){
       if (!b.alive){ b.deadT -= dt; if (b.deadT <= 0){ BOTS.respawn(b, farSpot(), Wd); standUp(b); } else { tickFall(b, dt); continue; } }
       BOTS.step(b, dt, Wd);
@@ -403,6 +437,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     const a = S.adsT;
     rig.position.set(0.19 - a * 0.1 + Math.cos(S.bob * 0.5) * amp, -0.135 - a * 0.012 + Math.abs(Math.sin(S.bob * 0.5)) * amp - rel * 0.1 - sw * 0.28, -0.62 - a * 0.06 + S.vKick * (w.pellets > 1 ? 0.09 : 0.04));
     rig.rotation.set(S.vKick * 0.05 * (w.pellets > 1 ? 2.2 : 1) + rel * 0.9, 0.05 * (1 - a), S.vKick * S.vRoll * 0.04 + rel * 0.35);
+    rig.position.y -= (S.stance === 2 ? 0.03 : 0) * (1 - a); rig.rotation.z += S.stance === 2 && !S.ads ? 0.1 : 0;
     const sp = S.sprintT; rig.position.x -= sp * 0.08; rig.position.y -= sp * 0.07; rig.rotation.x -= sp * 0.25; rig.rotation.y += sp * 0.75; rig.rotation.z += sp * 0.2 + Math.sin(S.stepPhase) * sp * 0.05;
     if (w.melee && S.swing > 0){ S.swing = Math.max(0, S.swing - dt * 4); const t = Math.sin(S.swing * Math.PI); rig.rotation.x = -t * 0.5; rig.rotation.y = t * 0.8; rig.position.x -= t * 0.2; rig.position.z -= t * 0.18; }
     if (S.flashT > 0){ S.flashT -= dt; FLASH.visible = true; FLASH.position.set(0, 0.03, g.userData.tip - 0.05); FLASH.scale.setScalar((id === 'shotgun' ? 0.42 : 0.28) * (0.8 + Math.random() * 0.5)); FLASH.material.rotation = Math.random() * 6; } else FLASH.visible = false;
@@ -421,14 +456,14 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   const STAND = { WALK, RUN, fov:camera.fov };
   /* ---------------- how your body moves: head bob, footsteps, sprinting, landing */
   function tickBody(dt){
-    const speed = Math.hypot(S.vx, S.vz), m = moveState(), alive = S.me.alive, sprint = m.running && !S.ads && !S.trigger && speed > 4.5 && alive && !S.climb;
+    const speed = Math.hypot(S.vx, S.vz), m = moveState(), alive = S.me.alive, sprint = !S.stance && m.running && !S.ads && !S.trigger && speed > 4.5 && alive && !S.climb;
     S.sprintT += ((sprint ? 1 : 0) - S.sprintT) * Math.min(1, dt * 11);
     if (P.onGround && !S.wasGround && !S.climb){ S.land = 1; footstep(true, 1.5); } S.wasGround = P.onGround; S.land = Math.max(0, S.land - dt * 5);
     let bobY = 0, bobX = 0, roll = 0;
     if (P.onGround && speed > 0.4 && alive){
       const strideLen = 2 + speed * 0.12, prev = S.stepPhase; S.stepPhase += speed / strideLen * Math.PI * dt * 1.0;
-      if (Math.floor(prev / Math.PI) !== Math.floor(S.stepPhase / Math.PI)){ S.stepSide *= -1; footstep(speed > 5); }
-      const a = Math.min(1, speed / 4.3) * (1 - S.adsT * 0.75) * (1 + S.sprintT * 0.7);
+      if (Math.floor(prev / Math.PI) !== Math.floor(S.stepPhase / Math.PI)){ S.stepSide *= -1; footstep(speed > 5, [1, 0.45, 0.3][S.stance]); }
+      const a = Math.min(1, speed / (S.stance ? 2 : 4.3)) * (1 - S.adsT * 0.75) * (1 + S.sprintT * 0.7) * [1, 0.7, 0.6][S.stance];
       bobY = -Math.abs(Math.sin(S.stepPhase)) * 0.035 * a + 0.017 * a; bobX = Math.cos(S.stepPhase) * 0.02 * a; roll = Math.cos(S.stepPhase) * 0.0035 * a;
     }
     S.bobX = (S.bobX || 0) + (bobX - (S.bobX || 0)) * Math.min(1, dt * 14); S.bobY = (S.bobY || 0) + (bobY - (S.bobY || 0)) * Math.min(1, dt * 14); S.roll = (S.roll || 0) + (roll - (S.roll || 0)) * Math.min(1, dt * 14);
@@ -497,7 +532,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     buildHud(); makeFx(); audio(); loadShots();
     const spots = streetSpots(), s = spots[Math.floor(spots.length / 2)];
     P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); P.vy = 0; P.yaw = 0; P.pitch = 0; P.fly = false; P.frozen = false;
-    S.me = Object.assign(R.newFighter({ weapon:'rifle' }), { kills:0, deaths:0, x:P.x, y:P.y, z:P.z }); S.deadT = 0; S.hurtT = 0; S.vx = S.vz = 0; S.assists = 0; S.climb = null; S.sprintT = 0; S.baseSens = SENS; S.stats = { shots:0, hits:0, heads:0, kills:0 }; S.now = 0; S.ads = false; S.adsT = 0; S.trigger = false; S.pressed = false; S.targets = [];
+    S.me = Object.assign(R.newFighter({ weapon:'rifle' }), { kills:0, deaths:0, x:P.x, y:P.y, z:P.z }); S.deadT = 0; S.hurtT = 0; S.vx = S.vz = 0; S.stance = 0; S.eyeDrop = 0; S.crouchAt = 0; S.assists = 0; S.climb = null; S.sprintT = 0; S.baseSens = SENS; S.stats = { shots:0, hits:0, heads:0, kills:0 }; S.now = 0; S.ads = false; S.adsT = 0; S.trigger = false; S.pressed = false; S.targets = [];
     S.bots = [];
     if (S.mode === 'bots'){
       S.W = { fighters:[S.me], near, nav:nav(), groundAt:(x, z, y) => groundAt(x, z, y), rand:Math.random, now:0, onShot:botShot };
@@ -512,11 +547,11 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     document.body.classList.add('sh-on'); document.body.classList.toggle('sh-touch', TOUCH);
     el('#shHp').hidden = S.mode !== 'bots'; el('#shDead').hidden = true; el('#shFeed').innerHTML = ''; el('#shHurt').style.opacity = 0;
     if (!TOUCH) canvas.requestPointerLock?.()?.catch?.(() => {});
-    toast(S.mode === 'bots' ? 'Nine bots dey hunt you. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · 1 to 6 swap guns · Esc pause', 4200);
+    toast(S.mode === 'bots' ? 'Nine bots dey hunt you. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
   }
   function stop(){
     if (!S.active) return;
-    S.active = false; started = false; P.frozen = false; WALK = STAND.WALK; RUN = STAND.RUN; SENS = S.baseSens; rig.visible = true; S.scoped = false; el('#shScope').hidden = true; el('#shHint').hidden = true; el('#shElim').style.opacity = 0; camera.rotation.z = 0; clearLadders(); camera.fov = STAND.fov; camera.updateProjectionMatrix();
+    S.active = false; started = false; P.frozen = false; WALK = STAND.WALK; RUN = STAND.RUN; HEAD = R.STANCE[0].height; S.stance = 0; S.eyeDrop = 0; S.crouchAt = 0; SENS = S.baseSens; rig.visible = true; S.scoped = false; el('#shScope').hidden = true; el('#shHint').hidden = true; el('#shElim').style.opacity = 0; camera.rotation.z = 0; clearLadders(); camera.fov = STAND.fov; camera.updateProjectionMatrix();
     for (const T of S.targets){ if (T.fall && T.fall.pool) scene.remove(T.fall.pool); if (T.bar) scene.remove(T.bar.g); scene.remove(T.A.root); } S.targets = []; S.bots = [];
     for (const g of [...FX.tr, ...FX.puff]){ g.m.visible = false; g.life = 0; } for (const m of FX.mark) m.visible = false;
     el('#shHud').hidden = true; el('#start').hidden = false; document.body.classList.remove('sh-on', 'sh-touch');
@@ -524,9 +559,9 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   }
   function tick(dt){
     if (!S.active) return;
-    if (S.paused) return;
+    if (S.paused){ camera.position.y -= S.eyeDrop; return; }
     S.now += dt; if (S.W) S.W.now = S.now; let f = S.me; const w = W[f.weapon];
-    R.tick(f, dt, S.now);
+    R.tick(f, dt, S.now); tickStance(dt);
     const canShoot = S.sprintT < 0.35 && !S.climb;
     if (canShoot && (S.pressed || (S.trigger && w.auto))){
       const fired = shoot();
@@ -537,8 +572,9 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     // recoil climbs quickly, then the view settles most of the way back
     const up = Math.min(S.pitchDebt, S.pitchDebt * dt * 30); S.pitchDebt -= up; P.pitch = Math.min(1.45, P.pitch + up); S.recoverDebt += up * 0.7;
     if (!S.trigger && S.recoverDebt > 0){ const d = Math.min(S.recoverDebt, S.recoverDebt * dt * 7 + 0.0004); P.pitch -= d; S.recoverDebt -= d; } 
-    WALK = STAND.WALK * w.moveMul * (S.ads ? 0.62 : 1);
-    RUN = STAND.RUN * w.moveMul * (S.ads || S.trigger ? 0.62 : 1);
+    const stanceSpeed = R.STANCE[S.stance].speed;
+    WALK = STAND.WALK * w.moveMul * (S.ads ? 0.62 : 1) * stanceSpeed;
+    RUN = S.stance ? WALK : STAND.RUN * w.moveMul * (S.ads || S.trigger ? 0.62 : 1);
     SENS = S.baseSens * (w.scope && S.adsT > 0.5 ? 0.3 : 1 - S.adsT * 0.35);
     tickLadder(dt); tickBody(dt);
     const fov = STAND.fov + ((w.zoom || STAND.fov) - STAND.fov) * S.adsT; if (Math.abs(camera.fov - fov) > 0.01){ camera.fov = fov; camera.updateProjectionMatrix(); }
@@ -558,15 +594,17 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
   addEventListener('keydown', e => {
     if (!S.active || e.repeat) return;
     if (e.code === 'KeyR') reload();
+    else if (e.code === 'KeyC') crouchDown();
     else if (e.code === 'KeyQ') swap(S.last);
     else if (/^Digit[1-6]$/.test(e.code)) swap(R.ORDER[+e.code.slice(5) - 1]);
   });
+  addEventListener('keyup', e => { if (S.active && e.code === 'KeyC') crouchUp(); });
   addEventListener('wheel', e => { if (!S.active || document.pointerLockElement !== canvas) return; const i = R.ORDER.indexOf(S.me.weapon), n = R.ORDER.length; swap(R.ORDER[(i + (e.deltaY > 0 ? 1 : n - 1)) % n]); }, { passive:true });
   document.addEventListener('pointerlockchange', () => { if (S.active && !TOUCH && !window.__TEST) setPaused(document.pointerLockElement !== canvas); });
   function momentum(mx, mz, dt){
     const k = 1 - Math.exp(-dt * (P.onGround ? 11 : 2.5)); S.vx += (mx - S.vx) * k; S.vz += (mz - S.vz) * k;
     return S.climb ? [0, 0] : [S.vx, S.vz];
   }
-  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, momentum };
+  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, momentum, noJump, setStance };
 })();
 window.SHOOTER = SHOOTER;
