@@ -1,7 +1,7 @@
 {
-  "name": "Wayo: Naija Hide & Seek",
-  "short_name": "Wayo",
-  "description": "Nigerian prop hunt in Computer Village, Ikeja",
+  "name": "Kasala: Computer Village Battle Royale",
+  "short_name": "Kasala",
+  "description": "Nigerian 3D battle royale in Computer Village, Ikeja",
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "landscape",

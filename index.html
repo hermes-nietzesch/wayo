@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#08080b"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Wayo"><meta name="description" content="Wayo: Naija Hide &amp; Seek. Hide as goods in Computer Village, Ikeja, or hunt them down with the Task Force. Play free with friends."><meta property="og:title" content="Wayo: Naija Hide &amp; Seek"><meta property="og:description" content="Hide as goods in Computer Village, Ikeja, or hunt them down with the Task Force. Play free with friends on your phone."><meta property="og:image" content="https://playwayo.netlify.app/og-image.jpg"><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image"></head><body>
-<title>Wayo · Naija Hide &amp; Seek</title>
+<title>Kasala · Computer Village Battle Royale</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bowlby+One+SC&family=Archivo:wght@500;700;800&display=swap">
@@ -28,9 +28,15 @@ button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
 #map{width:170px;height:170px;border-radius:10px;border:1.5px solid var(--line);background:var(--panel);flex:none}
 #zones{bottom:calc(env(safe-area-inset-bottom,0px) + 12px);left:50%;transform:translateX(-50%);display:flex;gap:6px;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 24px)}
 #zones button{min-width:40px;font-family:var(--display);font-weight:400;font-size:13px}
-#start{position:fixed;inset:0;z-index:10;overflow:auto;background:radial-gradient(60% 120% at 0% 50%,rgba(225,32,26,.55),transparent 60%),radial-gradient(60% 120% at 100% 50%,rgba(47,98,255,.5),transparent 60%),rgba(6,6,8,.74)}
+#start{position:fixed;inset:0;z-index:10;overflow:auto;background:radial-gradient(70% 110% at 18% 90%,rgba(255,90,20,.42),transparent 62%),radial-gradient(60% 110% at 100% 40%,rgba(47,98,255,.26),transparent 60%),rgba(6,6,8,.84)}
 #start .wrap{min-height:100%;max-width:1040px;margin:0 auto;padding:max(28px,env(safe-area-inset-top)) max(28px,env(safe-area-inset-right)) 24px max(28px,env(safe-area-inset-left));display:grid;grid-template-columns:1.2fr 1fr;gap:28px 40px;align-items:center}
-#start h1{margin:0;font:400 clamp(72px,13vw,150px)/.82 var(--display);letter-spacing:.01em}
+#start h1{margin:0;font:400 clamp(72px,13vw,150px)/.82 var(--display);letter-spacing:.01em;text-transform:uppercase;color:transparent;background:linear-gradient(180deg,#ffd27a 8%,#ff6a13 52%,#d3160f 92%);-webkit-background-clip:text;background-clip:text;filter:drop-shadow(0 3px 0 rgba(0,0,0,.55))}
+#start .art{display:block;width:100%;height:auto;margin-top:14px;filter:drop-shadow(0 12px 18px rgba(0,0,0,.65))}
+#start .tagline{color:#ffd27a}
+.modeRow{display:grid;grid-template-columns:1fr auto;gap:8px}.modeRow select,#diffIn{min-height:40px;background:rgba(0,0,0,.55);color:var(--ink);border:1.5px solid var(--line);border-radius:0;font:700 13px var(--body);padding:0 6px}
+.modes .mode{background:rgba(255,255,255,.1);color:#fff;border:0}.modes .mode.hot{background:linear-gradient(90deg,#d3160f,#ff6a13);color:#fff}.modes .mode:not(:disabled):hover{filter:brightness(1.15)}
+.diffL{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.how{display:block}
 .tagline{margin:6px 0 0;font:400 clamp(18px,2.4vw,26px)/1 var(--display);color:var(--accent);letter-spacing:.04em}
 .stamp{display:inline-block;margin-top:16px;padding:6px 12px;border:3px solid var(--accent);color:var(--accent);font:400 20px/1 var(--display);transform:rotate(-4deg);border-radius:3px}
 .sub{margin:14px 0 0;font-weight:500;font-size:16px;color:#d8d8de;max-width:38ch}
@@ -119,7 +125,7 @@ body:has(#endCard:not([hidden])) #touch,body:has(#endCard:not([hidden])) #gbtns,
   #tJump{width:84px!important;height:84px!important}
   #toast{top:calc(env(safe-area-inset-top,0px) + 54px)}
   #start .wrap{padding-top:max(18px,env(safe-area-inset-top));padding-bottom:16px;gap:16px 28px}
-  #start h1{font-size:76px} .tagline{font-size:17px} .stamp{font-size:16px;margin-top:10px} .sub{font-size:14px;margin-top:10px}
+  #start h1{font-size:66px} #start .art{margin-top:8px;max-height:48vh;object-fit:contain} .tagline{font-size:15px} .stamp{font-size:16px;margin-top:10px} .sub{font-size:14px;margin-top:10px}
   .mode{min-height:50px;font-size:19px} .roomHead b{font-size:30px} .seats li{min-height:26px;font-size:12px} .field input{min-height:42px}
   #start .wrap{align-items:start} .panel{gap:8px}
   body:has(#v_room:not([hidden])) #loadBox{display:none}
@@ -203,20 +209,21 @@ body:has(#endCard:not([hidden])) #touch,body:has(#endCard:not([hidden])) #gbtns,
 <div id="start">
   <div class="wrap">
     <div class="hero">
-      <h1>Wayo</h1>
-      <p class="tagline">Naija Hide &amp; Seek</p>
-      <span class="stamp">Raid in progress</span>
-      <p class="sub">Traders hide as goods in Computer Village, Ikeja. The Task Force must find them before time runs out.</p>
+      <h1>Kasala</h1>
+      <p class="tagline">Computer Village Battle Royale</p>
+      <img class="art" src="art/kasala_hero.webp" alt="Task Force and zombie fighters facing off" width="1150" height="526">
     </div>
     <div class="panel">
       <div id="loadBox"><div id="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div><div id="load">Starting…</div></div>
       <div id="v_home" class="view">
-        <label class="field"><span>Your name</span><input id="nameIn" maxlength="16" autocomplete="nickname" placeholder="e.g. Tunde"></label>
-        <div class="modes"><button id="btnCreate" class="mode" disabled>Create room</button><button id="btnJoin" class="mode">Join room</button></div>
-        <div class="minor"><button id="btnPractice" class="linkish" disabled>Practise with bots</button> <button id="btnRange" class="linkish" disabled>Guns test range</button> <button id="btnTips" class="linkish">Controls</button></div>
-        <div class="minor"><button id="btnBR" class="linkish" disabled>Battle royale</button> <select id="brIn" aria-label="Battle royale type"><option value="solo">Solo</option><option value="team">Teams</option></select></div>
-        <div class="minor"><button id="btnTeam" class="linkish" disabled>Team battle 5v5</button> <button id="btnBots" class="linkish" disabled>Free-for-all</button> <select id="diffIn" aria-label="Bot difficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select></div>
+        <div class="modes">
+          <div class="modeRow"><button id="btnBR" class="mode hot" disabled>Battle royale</button><select id="brIn" aria-label="Battle royale type"><option value="solo">Solo</option><option value="team">Teams</option></select></div>
+          <button id="btnTeam" class="mode" disabled>Team battle 5v5</button>
+          <button id="btnBots" class="mode" disabled>Free-for-all</button>
+        </div>
+        <div class="minor"><span class="diffL">Bots</span><select id="diffIn" aria-label="Bot difficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select> <button id="btnRange" class="linkish" disabled>Gun range</button> <button id="btnTips" class="linkish">Controls</button></div>
         <p id="homeMsg" class="practice" role="status"></p>
+        <div hidden><label class="field"><span>Your name</span><input id="nameIn" maxlength="16" autocomplete="nickname" placeholder="e.g. Tunde"></label><button id="btnCreate" disabled>Create room</button><button id="btnJoin">Join room</button><button id="btnPractice" disabled>Practise</button></div>
       </div>
       <div id="v_join" class="view" hidden>
         <label class="field"><span>Room code</span><input id="codeIn" maxlength="5" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="K7QXR" class="code"></label>
@@ -235,24 +242,23 @@ body:has(#endCard:not([hidden])) #touch,body:has(#endCard:not([hidden])) #gbtns,
       </div>
       <details class="how"><summary>How to play</summary>
         <div class="howBody">
-          <p><b>The raid.</b> Each round, the room is split into <b>Traders</b> and the <b>Task Force</b>. You don't choose: the game deals the sides, and they swap every round.</p>
-          <p><b>As a Trader:</b> you get 45 seconds to hide before the raid. Look at anything in the market (a gallon, a cooler, a stool, a keke) and tap <b>Become</b> to turn into it. Tap <b>Lock</b> to stay still and blend in. Survive for 4 minutes and the traders win. If you get hit, run and hide somewhere new: after 15 seconds without being hit, keeping still slowly brings your health back (up to three quarters). Tap <b>Whistle</b> or hold <b>Speak</b> to tease the hunters. Each taunt flashes a wide area on their map. During the raid every trader is also forced to whistle regularly (every 30 seconds in short raids, up to every minute in long ones), so pick a good spot.</p>
-          <p><b>As the Task Force:</b> you wait in the danfo while the traders hide. Then go and find them: anything that looks out of place could be a trader. Hit it with a stone, bottle or koboko. Catch every trader before time runs out and you win.</p>
-          <p><b>Team mic:</b> hold <b>TEAM MIC</b> to talk, or tap it once to leave it on while you move (tap again to stop). On a computer, hold B. Only your own side hears you. Earphones stop echo.</p>
-          <p><b>Caught?</b> You can watch the rest of the round through your teammates' eyes.</p>
-          <p><b>Points:</b> a match is several rounds (the host picks how many). Traders score for every 10 seconds they survive, +10 for escaping and +2 per taunt. The Task Force scores +20 per catch and +3 per hit, loses 1 for hitting innocent goods, and gets +10 each for catching everyone. Most points at the end wins.</p>
-          <p><b>Dropped out?</b> Just come back to the game. It reconnects by itself and puts you back in the round. If the host drops out, another player's phone takes over.</p>
+          <p><b>Battle royale.</b> Ten fighters, one market. You start with a pistol and a knife. Find better guns on shop counters and down the alleys, and stay inside the blue wall as it closes in. Last one standing wins.</p>
+          <p><b>Team battle.</b> Five against five, one life each round. First team to three rounds wins.</p>
+          <p><b>Free-for-all.</b> Everyone for themselves. First to 15 kills wins.</p>
+          <p><b>Views.</b> Play in first or third person. Aiming always goes through your sights.</p>
           <table>
             <tr><td>Move</td><td>W A S D · left stick on phone</td></tr>
             <tr><td>Look</td><td>Mouse · drag right side on phone</td></tr>
-            <tr><td>Run / jump</td><td>Shift · Space</td></tr>
-            <tr><td>Team mic</td><td>Hold B · TEAM MIC button on phone</td></tr>
-            <tr><td>Trader</td><td>E become · Q lock · T whistle · hold V to speak</td></tr>
-            <tr><td>Task Force</td><td>Click stone · right-click bottle · E koboko</td></tr>
+            <tr><td>Shoot / aim</td><td>Left click · right click</td></tr>
+            <tr><td>Sprint / jump</td><td>Shift · Space</td></tr>
+            <tr><td>Crouch / lie down</td><td>Tap C · hold C</td></tr>
+            <tr><td>Reload / change view</td><td>R · V</td></tr>
           </table>
           <button type="button" class="gotIt" onclick="this.closest('details').open=false">Got it</button>
         </div>
       </details>
+      <details class="how"><summary>Settings</summary>
+        <div class="howBody">
       <div class="ctlRow"><label for="layIn">Buttons</label><select id="layIn"><option value="auto">Auto (fits your phone)</option><option value="compact">Compact · short phones</option><option value="classic">Classic · most phones</option><option value="wide">Wide · long phones</option></select>
         <select id="sizeIn" aria-label="Button size"><option value="0.85">Small</option><option value="1" selected>Medium</option><option value="1.15">Large</option></select></div>
       <div class="ctlRow lookRow" id="gfxRow"><label for="gfxIn">Graphics</label><select id="gfxIn"><option value="auto">Auto</option><option value="high">High</option><option value="low">Low</option></select><label for="fpsIn">Show FPS</label><select id="fpsIn"><option value="0">Off</option><option value="1">On</option></select></div>
@@ -260,10 +266,13 @@ body:has(#endCard:not([hidden])) #touch,body:has(#endCard:not([hidden])) #gbtns,
       <div class="ctlRow" id="helpRow" hidden><label for="aimIn">Aim assist</label><select id="aimIn"><option value="1">On</option><option value="0">Off</option></select><label for="autoIn">Auto-fire</label><select id="autoIn"><option value="0">Off</option><option value="1">On</option></select></div>
       <div class="ctlRow lookRow"><label for="sensIn">Look speed</label><select id="sensIn"><option value="0.5">Very slow</option><option value="0.7">Slow</option><option value="1" selected>Normal</option><option value="1.4">Fast</option><option value="1.9">Very fast</option></select></div>
       <p id="iosTip" hidden>On iPhone, tap Share → <b>Add to Home Screen</b> and open the game from there to play full screen.</p>
+      <button type="button" class="gotIt" onclick="this.closest('details').open=false">Done</button>
+        </div>
+      </details>
       <div class="menuRow"><button id="musicBtn" aria-pressed="true">Music on</button>
       <details class="credits"><summary>Credits</summary>
         <p>Street layout © OpenStreetMap contributors (ODbL). Textures, sky and many props from Poly Haven (CC0). Brands on signs are invented.</p>
-        <p>Trader and Task Force characters made for Wayo; rigging and animations by Adobe Mixamo.</p>
+        <p>Characters made for Kasala with Tripo AI; rigging and animations by Adobe Mixamo.</p>
         <p>Lobby music: “Who Be Who”, an original song made for Wayo.</p>
         <p>Gun models from the Free CC0 Guns &amp; Explosives Pack by 3DModelsCC0.</p>
         <p>Gunshot recordings from The Free Firearm Sound Library (CC0) by Ben Jaszczak, Brian Nelson, Kevin Heras and Matthew Nanney.</p>
@@ -1928,7 +1937,7 @@ const GAME = (() => {
     phase:'menu', t:0,    // menu | hide | hunt | end
     me:null,              // my player record
     traders:[], hunters:[], shots:[], fx:[], blips:[],
-    chars:{}, clips:{}, ready:false, audio:null,
+    chars:{}, clips:{}, lifts:{}, armScenes:{}, ready:false, audio:null,
     myId:'me', net:null, rid:0, sendT:0,   // net: the NET link when playing online (null offline)
   };
   // who decides hits, catches, timers and bots: the host online, or this device when playing alone
@@ -2009,7 +2018,7 @@ const GAME = (() => {
   }
   // the shooter's rifle animations and finger-rigged fighters load apart from the hide and seek characters, which never need them
   let rifleSrc = null;
-  async function loadFighters(list){
+  async function loadFighters(list, arms = {}){
     const gl = new THREE.GLTFLoader(); if (window.MeshoptDecoder) gl.setMeshoptDecoder(MeshoptDecoder);
     const get = f => withRetry((u, ok, bad) => gl.load(u, ok, undefined, bad), 'chars/' + f + '.glb').then(g => { if (!g) throw new Error('could not download ' + f.replace('_', ' ')); return g; });
     if (!rifleSrc){
@@ -2019,12 +2028,34 @@ const GAME = (() => {
       rifleSrc = g; S.rifle = {};
     }
     await Promise.all(Object.keys(list).filter(n => !S.chars[n]).map(async n => prepChar(n, (await get(n)).scene, list[n], true)));
+    // the first-person arms are a separate, far more detailed model, so fingers keep their shape right in front of your eyes
+    await Promise.all(Object.keys(arms).filter(n => !S.armScenes[n]).map(async n => { const r = (await get(arms[n])).scene; r.traverse(o => { const w = o.isSkinnedMesh && o.geometry.attributes.skinWeight; if (w && w.normalized && !(w.array instanceof Float32Array)){ const d = w.array instanceof Uint16Array ? 65535 : 255, f = new Float32Array(w.count * 4); for (let i = 0; i < w.count; i++){ f[i * 4] = w.getX(i) / d; f[i * 4 + 1] = w.getY(i) / d; f[i * 4 + 2] = w.getZ(i) / d; f[i * 4 + 3] = w.getW(i) / d; } o.geometry.setAttribute('skinWeight', new THREE.BufferAttribute(f, 4)); } }); S.armScenes[n] = r; }));
     for (const name in S.chars){
       if (S.rifle[name]) continue;
       const posed = THREE.SkeletonUtils.clone(S.chars[name].root); matchPose(rifleSrc.scene, posed);
       S.rifle[name] = {};
       for (const c of rifleSrc.animations) if (c.name !== 'TPose') S.rifle[name][c.name] = retarget(c, rifleSrc.scene, posed);
+      bakeLift(name);
     }
+  }
+  // the rifle moves were built on one skeleton, and a character with taller boots or longer legs would sink through the floor.
+  // Play each move once here, find how low the soles really go, and remember how far to lift the body for that move.
+  function bakeLift(name){
+    const C = S.chars[name], root = THREE.SkeletonUtils.clone(C.root), clips = S.rifle[name], L = S.lifts[name] = {}; let skin = null;
+    root.scale.setScalar(C.scale); root.position.y = -C.minY * C.scale; root.traverse(o => { if (o.isSkinnedMesh) skin = o; });
+    const pos = skin.geometry.attributes.position, J = skin.geometry.attributes.skinIndex, W4 = skin.geometry.attributes.skinWeight, names = skin.skeleton.bones.map(b => norm(b.name));
+    const raw = pos.array || pos.data.array, unit = !pos.normalized ? 1 : raw instanceof Int16Array ? 1 / 32767 : raw instanceof Uint16Array ? 1 / 65535 : 1;
+    const feet = [], all = [], ax = ['X', 'Y', 'Z', 'W'], step = Math.max(1, Math.floor(pos.count / 160));
+    for (let v = 0; v < pos.count; v++){ if (v % step === 0) all.push(v); let w = 0; for (let k = 0; k < 4; k++) if (/Foot|Toe/.test(names[J['get' + ax[k]](v)] || '')) w += W4['get' + ax[k]](v); if (w > 0.6) feet.push(v); }
+    const soles = feet.filter((v, i) => i % Math.max(1, Math.floor(feet.length / 70)) === 0), mx = new THREE.AnimationMixer(root), v3 = new THREE.Vector3(), p3 = new THREE.Vector3(), t3 = new THREE.Vector3(), m4 = new THREE.Matrix4();
+    const low = list => { root.updateMatrixWorld(true); skin.skeleton.update(); let m = 1e9; for (const i of list){ p3.fromBufferAttribute(pos, i).multiplyScalar(unit).applyMatrix4(skin.bindMatrix); v3.set(0, 0, 0); for (let k = 0; k < 4; k++){ const w = W4['get' + ax[k]](i); if (w){ m4.fromArray(skin.skeleton.boneMatrices, J['get' + ax[k]](i) * 16); t3.copy(p3).applyMatrix4(m4); v3.addScaledVector(t3, w); } } v3.applyMatrix4(skin.bindMatrixInverse).applyMatrix4(skin.matrixWorld); if (v3.y < m) m = v3.y; } return m; };
+    for (const k in clips){
+      if (k === 'Grip') continue;
+      const a = mx.clipAction(clips[k]), d = clips[k].duration, dying = /^Die/.test(k), flat = dying || /^Prone/.test(k), n = dying ? 1 : /Idle/.test(k) ? 2 : 7; a.play(); let m = 1e9;
+      for (let i = 0; i < n; i++){ a.time = dying ? d - 0.001 : d * i / n; mx.update(0); m = Math.min(m, low(flat ? all : soles)); }
+      a.stop(); L[k] = -m;
+    }
+    mx.uncacheRoot(root);
   }
   // true bounds of a skinned character: run vertices through their bones (the raw geometry can be in another unit)
   function skinnedBox(root){
@@ -3697,8 +3728,8 @@ addEventListener('unhandledrejection', e => { if (!window.__ready) showError(e.r
     teleport(ZONES[q] ? q : 'B');
     updateLOD(true);
     window.__buildMs = Math.round(performance.now() - t1);
-    setProg(0.9, 'Loading traders and Task Force');
-    await GAME.init(p => setProg(0.9 + p * 0.1, 'Loading traders and Task Force'));
+    setProg(0.9, 'Loading fighters');
+    await GAME.init(p => setProg(0.9 + p * 0.1, 'Loading fighters'));
     setProg(1, 'Ready');
     $('#bar').classList.add('done');
     $('#load').textContent = ''; $('#loadBox').hidden = true;

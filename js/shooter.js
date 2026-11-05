@@ -81,10 +81,10 @@ const SHOOTER = (() => {
   function buildArms(name){
     if (ARMS.name === name) return;
     if (ARMS.root) rig.remove(ARMS.root);
-    const C = GAME.S.chars[name], root = THREE.SkeletonUtils.clone(C.root); let skin = null;
+    const C = GAME.S.chars[name], root = THREE.SkeletonUtils.clone(GAME.S.armScenes[name] || C.root); let skin = null;
     root.traverse(o => { if (o.isSkinnedMesh) skin = o; });
     const bones = skin.skeleton.bones, names = bones.map(b => norm(b.name)), G = skin.geometry, J = G.attributes.skinIndex, W4 = G.attributes.skinWeight, idx = G.index.array;
-    const armMat = skin.material.clone(); armMat.color.setScalar(0.62); armMat.envMapIntensity = 0.35;   // the arms sit right against the lamp of the gun scene
+    const armMat = skin.material.clone(); armMat.color.setScalar(0.7); armMat.envMapIntensity = 0.35; armMat.roughness = 0.75; armMat.metalness = 0;   // the arms sit right against the lamp of the gun scene
     const part1 = re => {   // keep only triangles that belong wholly to this arm
       const ok = new Uint8Array(J.count), out = [];
       for (let v = 0; v < J.count; v++){ let w = 0; for (let k = 0; k < 4; k++){ const c = 'XYZW'[k]; if (re.test(names[J['get' + c](v)] || '')) w += W4['get' + c](v); } ok[v] = w > 0.85 ? 1 : 0; }
@@ -429,9 +429,9 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     root.hidden = false; draw();
   }
   // start a shooter mode, showing the guide first if this is the player's first time
-  const FIGHTERS = { zombie_tank:1.85, tf:1.8 }, ME_CHAR = 'tf';
+  const FIGHTERS = { zombie_tank:1.85, tf:1.8 }, ARM_FILES = { tf:'tf_arms' }, ME_CHAR = 'tf';
   let readyP = null;
-  function ready(){ return readyP || (readyP = GAME.debug.loadFighters(FIGHTERS).catch(e => { readyP = null; throw e; })); }
+  function ready(){ return readyP || (readyP = GAME.debug.loadFighters(FIGHTERS, ARM_FILES).catch(e => { readyP = null; throw e; })); }
   function play(opts){
     const go = () => { if (!GAME.S.ready) return; toast('Getting fighters ready'); ready().then(() => start(opts)).catch(e => { console.warn(e); toast('Could not load the fighters. Check your connection and try again'); }); };
     if (seenTips()) go(); else showTips(go);
@@ -594,7 +594,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   // swap the hide and seek moves for the rifle set, and close the fingers round the gun for good
   function rigUp(A){
     for (const k in A.acts) A.acts[k].stop();
-    const C = GAME.S.rifle[A.name]; A.r = {}; A.on = {}; A.phase = Math.random();
+    const C = GAME.S.rifle[A.name]; A.r = {}; A.on = {}; A.phase = Math.random(); A.baseY = A.inner.position.y; A.lifts = GAME.S.lifts[A.name]; A.lift = A.lifts.Idle || 0;
     A.inner.traverse(o => { if (o.isBone && norm(o.name) === 'Hips') A.hips = o; });
     for (const k in C){
       if (k === 'Grip'){ for (const t of C.Grip.tracks){ const bone = A.inner.getObjectByName(t.name.slice(0, t.name.lastIndexOf('.'))); if (bone) bone.quaternion.fromArray(t.values); } continue; }
@@ -644,7 +644,13 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     setOn(A, want);
     A.phase = (A.phase + dt * s / stride) % 1;
     for (const k in want) if (!/Idle/.test(k)){ const a = A.r[k]; a.time = A.phase * a.getClip().duration; }
-    A.mixer.update(dt);
+    A.mixer.update(dt); liftTo(A, want, dt);
+  }
+  // keep the soles on the ground whatever move is playing, using the heights measured when the fighters loaded
+  function liftTo(A, want, dt){
+    let sum = 0, y = 0; for (const k in want){ const w = want[k]; sum += w; y += (A.lifts[k] || 0) * w; }
+    if (sum > 0) y /= sum;
+    A.lift += (y - A.lift) * Math.min(1, dt * 12); A.inner.position.y = A.baseY + A.lift;
   }
   // the gun sits in the right hand and points through the left, so it follows every pose; the chest tips to the aim and squares up with the target
   function holdGun(A, r){
@@ -666,12 +672,12 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   function fall(T, fromX, fromZ){
     const A = T.A, yaw = T.aimYaw ?? T.ry, rel = wrapA(Math.atan2(T.x - fromX, T.z - fromZ) - yaw), st = T.stance || 0, abs = Math.abs(rel);
     const k = st === 2 ? 'DieProne' : st === 1 ? 'DieCrouch' : abs < 0.8 ? 'DieBack' : abs > 2.3 ? (Math.random() < 0.35 ? 'DieHead' : 'DieFront') : 'DieRight', a = A.r[k];
-    setOn(A, {}); a.reset(); a.timeScale = 1.25; a.setEffectiveWeight(1); a.play(); A.on[k] = 1;
+    setOn(A, {}); a.reset(); a.timeScale = 1.25; a.setEffectiveWeight(1); a.play(); A.on[k] = 1; A.dieClip = k;
     T.fall = { t:0, land:a.getClip().duration / 1.25 * 0.42, landed:false };
   }
   function tickFall(T, dt){
     const F = T.fall, A = T.A; if (!F) return;
-    F.t += dt; A.mixer.update(dt);
+    F.t += dt; A.mixer.update(dt); liftTo(A, { [A.dieClip]:1 }, dt * 0.5);
     if (A.gun && !F.landed) holdGun(A, A.root);
     if (T.deadT >= 0.7) A.root.position.set(T.x, T.y, T.z);
     if (!F.landed && F.t >= F.land){
