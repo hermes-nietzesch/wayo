@@ -225,7 +225,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
       el('#shHpN').textContent = hp; el('#shHpBar').style.width = hp + '%'; el('#shHp').classList.toggle('low', hp <= 35);
     } else if (S.fight){
       const top = S.bots.reduce((a, b) => b.kills > a.kills ? b : a, S.bots[0]), hp = Math.max(0, Math.ceil(f.hp));
-      el('#shStats').innerHTML = `Kills <b>${f.kills}</b> · Assists <b>${S.assists}</b> · Deaths <b>${f.deaths}</b> · Top bot <b>${top.name} ${top.kills}</b> · ${S.diff}`;
+      el('#shStats').innerHTML = `First to ${FFA_GOAL} · You <b>${f.kills}</b> · Top bot <b>${top.name} ${top.kills}</b> · Deaths <b>${f.deaths}</b> · ${clock(S.ffaT)}`;
       el('#shHpN').textContent = hp; el('#shHpBar').style.width = hp + '%'; el('#shHp').classList.toggle('low', hp <= 35);
     } else el('#shStats').innerHTML = `Hits <b>${st.hits}</b> · Headshots <b>${st.heads}</b> · Down <b>${st.kills}</b> · Accuracy <b>${st.shots ? Math.round(st.hits / st.shots * 100) : 0}%</b>`;
   }
@@ -448,6 +448,24 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     if (S.oneLife && !f.alive) tickFall(f, dt);
     if (S.hurtT > 0){ S.hurtT -= dt; el('#shHurt').style.opacity = Math.min(1, S.hurtT * 3); const dd = el('#shDir'); dd.style.opacity = Math.min(1, S.hurtT * 3); dd.style.transform = `rotate(${(P.yaw + Math.PI - S.hurtFrom) * 180 / Math.PI}deg)`; }
     else { el('#shHurt').style.opacity = 0; el('#shDir').style.opacity = 0; }
+  }
+
+  /* ---------------- free-for-all: first to the kill target wins, or most kills when time runs out */
+  const FFA_GOAL = 15, FFA_TIME = 360;
+  function tickFFA(dt){
+    if (S.ffaEnd > 0){ S.ffaEnd -= dt; if (S.ffaEnd <= 0) finishFFA(); return; }
+    S.ffaT -= dt;
+    const lead = S.W.fighters.reduce((a, b) => (b.kills || 0) > (a.kills || 0) ? b : a);
+    if ((lead.kills || 0) >= FFA_GOAL || S.ffaT <= 0){ S.ffaEnd = 1.5; banner(lead === S.me ? 'You got there first' : lead.name + ' got there first', S.ffaT <= 0 ? 'Time up' : FFA_GOAL + ' kills', lead === S.me ? 'win' : 'lose'); }
+  }
+  function finishFFA(){
+    S.ended = true; setTrigger(false); S.ads = false; P.frozen = true; banner(); el('#shDead').hidden = true;
+    const all = S.W.fighters.slice().sort((a, b) => (b.kills || 0) - (a.kills || 0) || (a.deaths || 0) - (b.deaths || 0)), place = all.indexOf(S.me) + 1, h = el('#shEndT');
+    h.textContent = place === 1 ? 'You won' : '#' + place + ' of 10'; h.className = place === 1 ? 'win' : 'lose';
+    el('#shEndS').textContent = `Free-for-all · ${S.diff} · ${S.me.kills} kill${S.me.kills === 1 ? '' : 's'}, ${S.assists} assist${S.assists === 1 ? '' : 's'}`;
+    const row = f => `<tr class="${f === S.me ? 'me' : ''}"><td>${f === S.me ? 'You' : f.name}</td><td>${f.kills || 0}</td><td>${f.deaths || 0}</td></tr>`, tab = l => `<table><tr class="sep"><td>Player</td><td>Kills</td><td>Deaths</td></tr>${l.map(row).join('')}</table>`;
+    el('#shEndB').innerHTML = `<section>${tab(all.slice(0, 5))}${tab(all.slice(5))}</section>`;
+    el('#shEnd').hidden = false; if (document.pointerLockElement) document.exitPointerLock();
   }
 
   /* ---------------- battle royale: one life, loot the market, stay inside the shrinking zone */
@@ -782,13 +800,14 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
       if (S.oneLife){ S.me.A = GAME.debug.makeAvatar('task_force'); S.me.A.root.visible = false; S.me.A.b = {}; }
       if (S.team){ S.score = [0, 0]; pickBases(); newRound(1); }
     } else spawnTargets(spots);
+    S.ffaT = FFA_TIME; S.ffaEnd = 0;
     buildLadders();
     if (S.br){ placeLoot(); startBR(); }
     MUSIC.stop(); started = true; S.active = true; el('#start').hidden = true; el('#shHud').hidden = false; setPaused(false);
     document.body.classList.add('sh-on'); document.body.classList.toggle('sh-touch', TOUCH);
     el('#shHp').hidden = S.mode !== 'bots'; el('#shDead').hidden = true; el('#shFeed').innerHTML = ''; el('#shHurt').style.opacity = 0;
     if (!TOUCH) canvas.requestPointerLock?.()?.catch?.(() => {});
-    toast(S.br ? 'Loot is on shop counters and down the alleys. Stay inside the blue wall' : S.team ? 'Your team is in blue. Drop all five Traders' : S.fight ? 'Nine bots dey hunt you. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
+    toast(S.br ? 'Loot is on shop counters and down the alleys. Stay inside the blue wall' : S.team ? 'Your team is in blue. Drop all five Traders' : S.fight ? 'First to 15 kills wins. Yellow ladders go up to the roofs' : TOUCH ? 'Drag FIRE to aim and shoot' : 'Click to shoot · right-click to aim · R reload · C crouch, hold C to lie down · 1 to 6 swap guns · Esc pause', 4200);
   }
   function stop(){
     if (!S.active) return;
@@ -805,7 +824,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire">FIRE</button><button id="shFire
     if (S.paused || S.ended){ camera.position.y -= S.eyeDrop; return; }
     S.now += dt; if (S.W) S.W.now = S.now; let f = S.me; const w = W[f.weapon];
     R.tick(f, dt, S.now); tickStance(dt);
-    if (S.team) tickRound(dt); else if (S.br) tickBR(dt);
+    if (S.team) tickRound(dt); else if (S.br) tickBR(dt); else if (S.fight) tickFFA(dt);
     if (S.ended) return;
     f = S.me;
     if (S.br) tickItems(dt);
