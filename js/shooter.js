@@ -32,11 +32,11 @@ const SHOOTER = (() => {
   /* how each gun is held and aimed. palm and fore: where the right and left hands close, measured from the grip with the muzzle towards -z.
      rear and front: [height, distance] of the two sights, which get lined up on the middle of the screen. relief: how far the rear sight sits from your eye. */
   const HOLD = {
-    rifle:{ palm:[0, 0.035, 0.005], fore:[0, 0.045, -0.3], rear:[0.155, -0.194], front:[0.157, -0.569], relief:0.5, hip:[0.15, -0.18, -0.36] },
-    smg:{ palm:[0, 0.01, -0.005], fore:[0, 0.03, -0.26], rear:[0.19, -0.02], front:[0.19, -0.3], relief:0.34, hip:[0.15, -0.16, -0.36], built:true },
-    pistol:{ palm:[0, -0.01, 0], fore:[-0.025, -0.075, 0.015], rear:[0.075, 0], front:[0.074, -0.14], relief:0.5, hip:[0.13, -0.13, -0.44], elbowR:[0.3, -0.88, 0.36], elbowL:[-0.4, -0.86, 0.3] },
-    shotgun:{ palm:[0, 0.065, 0.02], fore:[0, -0.005, -0.48], rear:[0.134, -0.133], front:[0.134, -0.807], relief:0.46, hip:[0.15, -0.19, -0.34], clearAim:true },
-    sniper:{ palm:[0, -0.005, 0.04], fore:[0, -0.03, -0.25], rear:[0.096, 0.087], front:[0.096, -0.14], relief:0.3, hip:[0.15, -0.17, -0.36] },
+    rifle:{ palm:[0, 0.035, 0.005], fore:[0, 0.045, -0.3], mag:[0, -0.11, -0.15], magS:[0.035, 0.16, 0.08], rear:[0.155, -0.194], front:[0.157, -0.569], relief:0.5, hip:[0.15, -0.18, -0.36] },
+    smg:{ palm:[0, 0.01, -0.005], fore:[0, 0.03, -0.26], mag:[0, -0.1, -0.09], magS:[0.03, 0.15, 0.05], rear:[0.19, -0.02], front:[0.19, -0.3], relief:0.34, hip:[0.15, -0.16, -0.36], built:true },
+    pistol:{ palm:[0, -0.01, 0], fore:[-0.025, -0.075, 0.015], mag:[0, -0.1, 0.02], magS:[0.024, 0.1, 0.04], rear:[0.075, 0], front:[0.074, -0.14], relief:0.5, hip:[0.13, -0.13, -0.44], elbowR:[0.3, -0.88, 0.36], elbowL:[-0.4, -0.86, 0.3] },
+    shotgun:{ palm:[0, 0.065, 0.02], fore:[0, -0.005, -0.48], mag:[0, -0.05, -0.2], magS:[0.024, 0.024, 0.065], shells:true, rear:[0.134, -0.133], front:[0.134, -0.807], relief:0.46, hip:[0.15, -0.19, -0.34], clearAim:true },
+    sniper:{ palm:[0, -0.005, 0.04], fore:[0, -0.03, -0.25], mag:[0, -0.07, -0.12], magS:[0.03, 0.09, 0.07], rear:[0.096, 0.087], front:[0.096, -0.14], relief:0.3, hip:[0.15, -0.17, -0.36] },
     knife:{ palm:[0, 0, 0.04], rear:[0, 0], front:[0, -1], relief:0.3, hip:[0.17, -0.12, -0.36], oneHand:true },
   };
   const MODEL = {};
@@ -138,6 +138,26 @@ const SHOOTER = (() => {
     if (!H.oneHand) poseArm('Left', new THREE.Vector3(...H.fore), new THREE.Vector3(...(H.elbowL || [-0.25, -0.9, 0.35])).normalize());
     rig.position.copy(px); rig.rotation.copy(rx);
   }
+  /* ---------------- reloading in first person: the left hand leaves the gun, fetches a new magazine and seats it. Times are fractions of the reload. */
+  const POUCH = [-0.1, -0.3, 0.06], SHELLS = [-0.1, -0.24, -0.06];
+  const SPARE = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color:0x1b1c1f, roughness:0.55, metalness:0.5 }));
+  SPARE.visible = false; rig.add(SPARE);
+  const relPath = H => H.shells
+    ? [[0, H.fore], [0.13, H.mag], [0.23, SHELLS], [0.33, H.mag], [0.43, SHELLS], [0.53, H.mag], [0.63, SHELLS], [0.73, H.mag], [0.84, H.fore], [0.92, [H.fore[0], H.fore[1], H.fore[2] + 0.1]], [1, H.fore]]
+    : [[0, H.fore], [0.2, H.mag], [0.42, POUCH], [0.54, POUCH], [0.76, H.mag], [1, H.fore]];
+  const magOut = () => { click(0.12, 900); thump(0.06, 170, 0.05); }, magIn = () => { click(0.2, 1300); thump(0.12, 125, 0.07); }, bolt = () => { click(0.18, 2400); blast(0.08, 0.05, 1500, 2); }, shell = () => { click(0.13, 1900); thump(0.05, 210, 0.04); };
+  const relSounds = H => H.shells ? [[0.13, shell], [0.33, shell], [0.53, shell], [0.73, shell], [0.88, bolt], [0.96, bolt]] : [[0.2, magOut], [0.74, magIn], [0.9, bolt]];
+  const smooth = t => t * t * (3 - 2 * t), _rp = new THREE.Vector3(), _elb = new THREE.Vector3();
+  function poseReload(t, H){
+    const P = relPath(H); let i = 0; while (i < P.length - 2 && t > P[i + 1][0]) i++;
+    const a = P[i], b = P[i + 1], u = smooth(Math.max(0, Math.min(1, (t - a[0]) / (b[0] - a[0]))));
+    _rp.set(a[1][0] + (b[1][0] - a[1][0]) * u, a[1][1] + (b[1][1] - a[1][1]) * u, a[1][2] + (b[1][2] - a[1][2]) * u);
+    const px = rig.position.clone(), rx = rig.rotation.clone(); rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0); rig.updateMatrixWorld(true);
+    poseArm('Left', _rp, _elb.set(...(H.elbowL || [-0.25, -0.9, 0.35])).normalize());
+    rig.position.copy(px); rig.rotation.copy(rx);
+    const show = H.shells ? _rp.y < -0.06 || t < 0.73 && t > 0.13 : t > 0.46 && t < 0.75;   // a fresh magazine, or a shell, comes up in the hand
+    SPARE.visible = show; if (show){ SPARE.scale.set(...H.magS); SPARE.position.copy(_rp); SPARE.position.y += H.shells ? 0.03 : -0.02; }
+  }
   const GM = {};
   for (const id in GUNS){ const g = new THREE.Group(); GUNS[id](g); g.visible = false; rig.add(g); GM[id] = g; }
   function glowTex(inner, outer){ const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 1, 32, 32, 31); r.addColorStop(0, inner); r.addColorStop(0.35, outer); r.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); }
@@ -200,6 +220,7 @@ const SHOOTER = (() => {
     src.connect(lp).connect(g).connect(limiter); src.start();
   }
   const click = (v = 0.18, f = 3000) => blast(v, 0.03, f, 3);
+  const slash = () => { blast(0.13, 0.13, 1900, 1.1); blast(0.07, 0.09, 3400, 1.4); };   // the blade cutting air
   function footstep(run, vol = 1){ blast((run ? 0.11 : 0.07) * vol, 0.06, run ? 900 : 650, 0.9); thump((run ? 0.09 : 0.05) * vol, 95, 0.06); }
 
   /* ---------------- first or third person, kept for next time */
@@ -618,12 +639,13 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   function shoot(){
     const f = S.me, id = f.weapon, w = W[id], o = eye(), shot = R.fire(f, aimDir(), moveState(), S.now, Math.random);
     if (!shot) return false;
-    bang(id); S.stats.shots++;
+    if (w.melee) slash(); else bang(id);
+    S.stats.shots++;
     if (S.fight) BOTS.hearShot(S.bots, f.x, f.z, f, botWorld());
     if (w.melee){
       S.swing = 1;
       const hit = R.knifeTrace(o, shot.dirs[0], S.targets, near, f);
-      if (hit){ const r = hurt(hit.target, hit, id); report(hit.target, [{ d:r.dmg, head:false, at:[hit.target.x, hit.target.y + 1.2, hit.target.z] }], r.killed); blast(0.3, 0.09, 1400, 2); }
+      if (hit){ const r = hurt(hit.target, hit, id); report(hit.target, [{ d:r.dmg, head:false, at:[hit.target.x, hit.target.y + 1.2, hit.target.z] }], r.killed); blast(0.3, 0.08, 1100, 1.6); thump(0.26, 105, 0.11); }
       return true;
     }
     const tally = new Map(); let hits = 0;
@@ -648,7 +670,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   }
   function setTrigger(v){ if (v && !S.trigger) S.pressed = true; S.trigger = v; }
   function swap(id){ if (!S.active) return; const cur = S.me.weapon; if (R.switchWeapon(S.me, id, S.now)){ S.last = cur; click(0.14, 1800); } }
-  function reload(){ if (S.active && R.startReload(S.me, S.now)) click(0.16, 1500); }
+  function reload(){ if (S.active) R.startReload(S.me, S.now); }
   function dry(){ click(0.2, 2400); }
 
   /* ---------------- bots: they walk the market, hunt each other and hunt you */
@@ -664,7 +686,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   }
   const norm = n => n.replace(/^mixamorig:?/, '').replace(/_\d+$/, '');
   function outfit(b){
-    const A = b.A, want = { RightHand:0, LeftHand:0, RightHandMiddle1:0, Spine:0, Spine1:0, Spine2:0 }; A.b = {};
+    const A = b.A, want = { RightHand:0, LeftHand:0, LeftArm:0, LeftForeArm:0, RightHandMiddle1:0, Spine:0, Spine1:0, Spine2:0 }; A.b = {};
     A.inner.traverse(o => { if (o.isBone && norm(o.name) in want) A.b[norm(o.name)] = o; });
     rigUp(A); gunFor(b);
   }
@@ -691,7 +713,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     if (model){ model.rotation.y = Math.PI; g.add(model); }
     else { part(g, STEEL, 0.045, 0.06, L * 0.6, 0, 0.02, L * 0.12); part(g, id === 'rifle' || id === 'shotgun' || id === 'sniper' ? WOOD : PLASTIC, 0.04, 0.09, L * 0.3, 0, -0.01, -L * 0.25); tube(g, DARK, 0.012, L * 0.45, 0, 0.03, L * 0.5); part(g, PLASTIC, 0.03, 0.09, 0.05, 0, -0.06, 0); }
     const fl = new THREE.Sprite(FLASH.material); fl.position.set(0, 0.03, L * 0.75); fl.scale.setScalar(0.55); fl.visible = false; g.add(fl); g.userData.fl = fl;
-    A.root.add(g); A.gun = g; A.flashT = 0;
+    A.root.add(g); A.gun = g; A.flashT = 0; A.short = { pistol:[0.05, -0.05], smg:[0.2, -0.03] }[id] || null;
   }
   const _q0 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _y = new THREE.Vector3(0, 1, 0), _d = new THREE.Vector3(), _yq = new THREE.Quaternion();
   const _hl = new THREE.Vector3(), _hr = new THREE.Vector3(), _ax = new THREE.Vector3(), _m = new THREE.Matrix4(), _o = new THREE.Vector3();
@@ -737,12 +759,32 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     _d.copy(_hl).sub(_hr).normalize();
     _m.lookAt(_d, _o, _y); A.gun.quaternion.setFromRotationMatrix(_m); A.gun.position.copy(_hr);
   }
+  // pistols and SMGs are shorter than the rifle the moves were made for, so the left arm reaches in to the gun instead of hanging in the air
+  const _a0 = new THREE.Vector3(), _e0 = new THREE.Vector3(), _h0 = new THREE.Vector3(), _t0 = new THREE.Vector3(), _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _qs = new THREE.Quaternion(), _qp = new THREE.Quaternion(), _qw = new THREE.Quaternion();
+  function swing(bone, from, to){
+    _qs.setFromUnitVectors(from, to); bone.getWorldQuaternion(_qw); bone.parent.getWorldQuaternion(_qp).invert();
+    bone.quaternion.copy(_qp).multiply(_qs).multiply(_qw); bone.updateMatrixWorld(true);
+  }
+  function reachGun(A, r){
+    const B = A.b; if (!B.LeftArm || !B.LeftForeArm) return;
+    r.getWorldPosition(_t0); if (_t0.distanceToSquared(camera.position) > 900) return;
+    _t0.copy(_hr).addScaledVector(_d, A.short[0]); _t0.y += A.short[1]; r.localToWorld(_t0);
+    B.LeftHand.updateWorldMatrix(true, false); B.LeftArm.getWorldPosition(_a0); B.LeftForeArm.getWorldPosition(_e0); B.LeftHand.getWorldPosition(_h0);
+    const la = _a0.distanceTo(_e0), lb = _e0.distanceTo(_h0), lt = Math.max(0.05, Math.min(la + lb - 0.002, _a0.distanceTo(_t0)));
+    _v1.copy(_t0).sub(_a0).normalize(); _v2.copy(_e0).sub(_a0); _v2.addScaledVector(_v1, -_v2.dot(_v1)).normalize();   // the elbow stays on the side it was already pointing
+    const cs = (la * la + lt * lt - lb * lb) / (2 * la * lt), sn = Math.sqrt(Math.max(0, 1 - cs * cs));
+    _h0.copy(_a0).addScaledVector(_v1, la * cs).addScaledVector(_v2, la * sn);   // the new elbow
+    _v1.copy(_e0).sub(_a0).normalize(); _v2.copy(_h0).sub(_a0).normalize(); swing(B.LeftArm, _v1, _v2);
+    B.LeftHand.updateWorldMatrix(true, false); B.LeftForeArm.getWorldPosition(_e0); B.LeftHand.getWorldPosition(_h0);
+    _v1.copy(_h0).sub(_e0).normalize(); _v2.copy(_t0).sub(_e0).normalize(); swing(B.LeftForeArm, _v1, _v2);
+  }
   function aimPose(b){
     const A = b.A, B = A.b, r = A.root, p = Math.max(-0.9, Math.min(0.9, b.aimPitch || 0)), yaw = b.aimYaw;
     _ax.set(Math.cos(yaw), 0, -Math.sin(yaw)); bend(B.Spine1, _ax, -p * 0.5); bend(B.Spine2, _ax, -p * 0.5);
     holdGun(A, r);
     const err = Math.atan2(_d.x, _d.z);
     if (Math.abs(err) < 1.3){ bend(B.Spine2, _y, -err); holdGun(A, r); }
+    if (A.short) reachGun(A, r);
   }
   /* ---------------- going down: there is no death animation in the character files, so the body falls under code */
   const POOL = new THREE.CircleGeometry(0.55, 16), POOLM = new THREE.MeshBasicMaterial({ color:0x4a0806, transparent:true, opacity:0.8, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-3 });
@@ -1065,27 +1107,33 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     const f = S.me, id = f.weapon;
     for (const k in GM) GM[k].visible = k === id && f.alive;
     const w = W[id], g = GM[id], H = HOLD[id];
-    S.adsT += ((S.ads && !w.melee && f.alive ? 1 : 0) - S.adsT) * Math.min(1, dt * 14);
+    S.adsT += ((S.ads && !w.melee && f.alive && !R.reloading(f, S.now) ? 1 : 0) - S.adsT) * Math.min(1, dt * 14);
     const scoped = !!w.scope && S.adsT > 0.85 && f.alive; if (scoped !== !!S.scoped){ S.scoped = scoped; el('#shScope').hidden = !scoped; }
     rig.visible = !scoped && S.tpT < 0.5 && f.alive;
     S.vKick = Math.max(0, S.vKick - dt * (w.melee ? 3 : 9));
     const m = moveState(); S.bob += dt * (m.running ? 13 : m.moving ? 9 : 2);
     const amp = (m.running ? 0.012 : m.moving ? 0.007 : 0.0015) * (1 - S.adsT * 0.9);
-    const rel = R.reloading(f, S.now) ? Math.sin(Math.PI * Math.min(1, 1 - (f.reloadAt - S.now) / W[f.reloadId].reload)) : 0;
+    const reloading = R.reloading(f, S.now) && f.alive, relT = reloading ? Math.min(1, 1 - (f.reloadAt - S.now) / W[f.reloadId].reload) : 0, rel = Math.sin(Math.PI * relT);
     const sw = S.now < f.swapAt ? (f.swapAt - S.now) / 0.32 : 0;
     const a = S.adsT, real = !!g.userData.real;
+    if (!reloading && S.relPose){ S.relPose = false; SPARE.visible = false; ARMS.id = null; }
     if (ARMS.root){ ARMS.root.visible = real; if (real) fitArms(id); ARMS.R.visible = !(H.clearAim && a > 0.6); }   // a shotgun's stock is so low that the firing hand would sit right over the sights
     // aimed: the gun moves so the rear and front sights sit in a line through the exact middle of the screen
     const ry = H.rear[0], rz = H.rear[1], tilt = -Math.atan2(H.front[0] - ry, rz - H.front[1]), c = Math.cos(tilt), sn = Math.sin(tilt);
     const adsY = real ? -(ry * c - rz * sn) : -0.147, adsZ = real ? -H.relief - (ry * sn + rz * c) : -0.67;
     const hip = real ? H.hip : [0.19, -0.135, -0.62];
     rig.scale.setScalar(real ? 1 : 0.72);
-    rig.position.set(hip[0] * (1 - a) + (real ? 0 : a * 0.09) + Math.cos(S.bob * 0.5) * amp, hip[1] + (adsY - hip[1]) * a + Math.abs(Math.sin(S.bob * 0.5)) * amp - rel * 0.1 - sw * 0.28, hip[2] + (adsZ - hip[2]) * a + S.vKick * (w.pellets > 1 ? 0.09 : 0.04) * (1 - a * 0.6));
-    rig.rotation.set(S.vKick * 0.05 * (w.pellets > 1 ? 2.2 : 1) * (1 - a * 0.7) + rel * 0.9 + (real ? 0.03 * (1 - a) + tilt * a : 0), (real ? 0.07 : 0.05) * (1 - a), S.vKick * S.vRoll * 0.04 * (1 - a * 0.7) + rel * 0.35);
+    rig.position.set(hip[0] * (1 - a) - rel * 0.03 + (real ? 0 : a * 0.09) + Math.cos(S.bob * 0.5) * amp, hip[1] + (adsY - hip[1]) * a + Math.abs(Math.sin(S.bob * 0.5)) * amp + rel * 0.02 - sw * 0.28, hip[2] + (adsZ - hip[2]) * a + S.vKick * (w.pellets > 1 ? 0.09 : 0.04) * (1 - a * 0.6));
+    rig.rotation.set(S.vKick * 0.05 * (w.pellets > 1 ? 2.2 : 1) * (1 - a * 0.7) + rel * 0.2 + (real ? 0.03 * (1 - a) + tilt * a : 0), (real ? 0.07 : 0.05) * (1 - a), S.vKick * S.vRoll * 0.04 * (1 - a * 0.7) - rel * 0.55);
     rig.position.y -= (S.stance === 2 ? 0.03 : 0) * (1 - a); rig.rotation.z += S.stance === 2 && !S.ads ? 0.1 : 0;
     const sp = S.sprintT; rig.position.x -= sp * 0.08; rig.position.y -= sp * 0.07; rig.rotation.x -= sp * 0.25; rig.rotation.y += sp * 0.75; rig.rotation.z += sp * 0.2 + Math.sin(S.stepPhase) * sp * 0.05;
     if (w.melee && S.swing > 0){ S.swing = Math.max(0, S.swing - dt * 4); const t = Math.sin(S.swing * Math.PI); rig.rotation.x = -t * 0.5; rig.rotation.y = t * 0.8; rig.position.x -= t * 0.2; rig.position.z -= t * 0.18; }
     if (S.flashT > 0){ S.flashT -= dt; FLASH.visible = true; FLASH.position.set(0, real ? H.front[0] - 0.02 : 0.03, g.userData.tip - 0.05); FLASH.scale.setScalar((id === 'shotgun' ? 0.42 : 0.28) * (0.8 + Math.random() * 0.5) * (1 - a * 0.4)); FLASH.material.rotation = Math.random() * 6; } else FLASH.visible = false;
+    if (reloading){
+      if (S.relKey !== f.reloadAt){ S.relKey = f.reloadAt; S.relI = 0; }
+      const list = relSounds(H); while (S.relI < list.length && relT >= list[S.relI][0]) list[S.relI++][1]();
+      if (real && ARMS.root && !H.oneHand && S.tpT < 0.5){ S.relPose = true; poseReload(relT, H); }
+    }
     if (!vmScene.environment && scene.environment) vmScene.environment = scene.environment;
     vmCam.near = real ? 0.02 + a * 0.04 : 0.01;   // when aimed, the stock passes your cheek and is cut away
     vmCam.aspect = camera.aspect; vmCam.updateProjectionMatrix();
