@@ -217,6 +217,7 @@ body:has(#endCard:not([hidden])) #touch,body:has(#endCard:not([hidden])) #gbtns,
       <div id="loadBox"><div id="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div><div id="load">Starting…</div></div>
       <div id="v_home" class="view">
         <div class="modes">
+          <button id="btnFriends" class="mode" disabled>Play with friends</button>
           <div class="modeRow"><button id="btnBR" class="mode hot" disabled>Battle royale</button><select id="brIn" aria-label="Battle royale type"><option value="solo">Solo</option><option value="team">Teams</option></select></div>
           <button id="btnTeam" class="mode" disabled>Team battle 5v5</button>
           <button id="btnBots" class="mode" disabled>Free-for-all</button>
@@ -3800,4 +3801,5 @@ window.__dbg = { near, local, topAt, groundAt, COLS, blockedAt, inFootprint }; w
 <script src="js/rules.js"></script>
 <script src="js/bots.js"></script>
 <script src="js/shooter.js"></script>
+<script src="js/net.js"></script>
 </body></html>

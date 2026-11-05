@@ -72,6 +72,8 @@
     const w = WEAPONS[f.weapon];
     return ((s.ads ? w.ads : w.hip) + f.bloom + (s.airborne ? AIR_SPREAD : s.running ? RUN_SPREAD : s.moving ? MOVE_SPREAD : 0) * (s.ads ? 0.6 : 1)) * STANCE[s.stance || 0].steady;
   }
+  // the same seed gives the same bullet spread on the phone and on the game server
+  function seeded(s) { return () => { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   // uses one round and returns the direction of each pellet, or null if the gun can't fire
   function fire(f, dir, s, now, rand) {
     if (!canFire(f, now)) return null;
@@ -208,5 +210,5 @@
     }
     return best;
   }
-  return { WEAPONS, ORDER, BEST, PLAYER, STANCE, ZONE_PHASES, bestGun, takeItem, burn, makeZone, zoneTick, inZone, newFighter, canFire, reloading, startReload, switchWeapon, tick, spreadOf, fire, damageAt, applyDamage, rayBox, rayWorld, hitboxes, traceShot, knifeTrace };
+  return { seeded, WEAPONS, ORDER, BEST, PLAYER, STANCE, ZONE_PHASES, bestGun, takeItem, burn, makeZone, zoneTick, inZone, newFighter, canFire, reloading, startReload, switchWeapon, tick, spreadOf, fire, damageAt, applyDamage, rayBox, rayWorld, hitboxes, traceShot, knifeTrace };
 });
