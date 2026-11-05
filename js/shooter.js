@@ -92,7 +92,8 @@ const SHOOTER = (() => {
       const g = G.clone(); g.setIndex(out); const m = new THREE.SkinnedMesh(g, armMat); m.bind(skin.skeleton, skin.bindMatrix); m.frustumCulled = false; skin.parent.add(m); return m;
     };
     ARMS.R = part1(WANT_R); ARMS.L = part1(WANT_L); skin.parent.remove(skin);
-    root.scale.setScalar(C.scale); root.rotation.y = Math.PI; rig.add(root); ARMS.root = root; ARMS.name = name; ARMS.id = null; ARMS.b = {};
+    root.scale.setScalar(C.scale * (ROSTER.find(c => c.id === name).armS || 1)); root.rotation.y = Math.PI; rig.add(root);   // the biggest fighters' arms are slimmed a little so they don't hide the gun
+    ARMS.root = root; ARMS.name = name; ARMS.id = null; ARMS.b = {};
     root.traverse(o => { if (o.isBone) ARMS.b[norm(o.name)] = o; });
     // the rifle idle gives a natural hold: note how each hand sits against the gun, then put the same hold on every gun
     const clips = GAME.S.rifle[name], mx = new THREE.AnimationMixer(root); mx.clipAction(clips.Idle).play(); mx.update(0);
@@ -433,12 +434,23 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   const TEAMS = { task:{ name:'Task Force', c:'#e1201a' }, zombies:{ name:'Zombies', c:'#7fbf3f' }, traders:{ name:'Traders', c:'#ffb020' }, heroes:{ name:'Heroes', c:'#3a8bff' } };
   const ROSTER = [
     { id:'tf', name:'Sarge', team:'task', h:1.8, arms:'tf_arms' },
-    { id:'zombie_tank', name:'Agbero', team:'zombies', h:1.85 },
-    { id:'trader_man', name:'Emeka', team:'traders' },
-    { id:'trader_woman', name:'Iya Bose', team:'traders' },
+    { id:'nysc_m', name:'Corporal', team:'task', h:1.78, arms:'nysc_m_arms' },
+    { id:'nysc_f', name:'Officer Ada', team:'task', h:1.7, arms:'nysc_f_arms' },
+    { id:'blazer', name:'Detective', team:'task', h:1.72, arms:'blazer_arms' },
+    { id:'hoodie_m', name:'Undercover', team:'task', h:1.78, arms:'hoodie_m_arms' },
+    { id:'zombie_tank', name:'Agbero', team:'zombies', h:1.85, arms:'zombie_tank_arms', armS:0.9 },
+    { id:'z_mech', name:'Mechanic', team:'zombies', h:1.9, arms:'z_mech_arms', armS:0.82 },
+    { id:'z_cond', name:'Conductor', team:'zombies', h:1.76, arms:'z_cond_arms' },
+    { id:'z_hawk', name:'Hawker', team:'zombies', h:1.68, arms:'z_hawk_arms' },
+    { id:'z_man', name:'Area Boy', team:'zombies', h:1.76, arms:'z_man_arms' },
+    { id:'kaftan', name:'Alhaji', team:'traders', h:1.78, arms:'kaftan_arms' },
+    { id:'stud_f', name:'Chioma', team:'traders', h:1.68, arms:'stud_f_arms' },
+    { id:'stud_m', name:'Kunle', team:'traders', h:1.78, arms:'stud_m_arms' },
+    { id:'trader_man', name:'Emeka', team:'traders', bot:true },
+    { id:'trader_woman', name:'Iya Bose', team:'traders', bot:true },
   ];
   const PICK_KEY = 'kasala-pick', MAX_KINDS = GFX.low ? 5 : 10;
-  const byId = id => ROSTER.find(c => c.id === id), inTeam = t => ROSTER.filter(c => c.team === t), shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const byId = id => ROSTER.find(c => c.id === id), inTeam = t => ROSTER.filter(c => c.team === t), pickable = t => inTeam(t).filter(c => !c.bot), shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   function savedPick(){ try { const c = byId(localStorage.getItem(PICK_KEY)); if (c) return c; } catch (e) {} return ROSTER[0]; }
   // who is in this match. Only these fighters get downloaded, so a phone never holds the whole cast in memory.
   function makePlan(opts = {}, me = savedPick()){
@@ -479,8 +491,8 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
       const open = Object.keys(TEAMS).filter(t => inTeam(t).length), t = TEAMS[me.team]; root.style.setProperty('--tc', t.c);
       root.querySelector('h2').textContent = opts.mode === 'team' ? 'Choose your team' : 'Choose your fighter';
       root.querySelector('.pt').innerHTML = open.map(k => `<button data-t="${k}" aria-pressed="${k === me.team}">${TEAMS[k].name}</button>`).join('');
-      root.querySelector('.pg').innerHTML = inTeam(me.team).map(c => `<button class="pc" data-c="${c.id}" aria-pressed="${c === me}" aria-label="${c.name}"><i>${c.name[0]}</i><img src="art/p/${c.id}.webp" alt="" onerror="this.remove()"><b>${c.name}</b></button>`).join('');
-      root.querySelectorAll('[data-t]').forEach(b => { b.onclick = () => { me = inTeam(b.dataset.t)[0]; draw(); }; });
+      root.querySelector('.pg').innerHTML = pickable(me.team).map(c => `<button class="pc" data-c="${c.id}" aria-pressed="${c === me}" aria-label="${c.name}"><i>${c.name[0]}</i><img src="art/p/${c.id}.webp" alt="" onerror="this.remove()"><b>${c.name}</b></button>`).join('');
+      root.querySelectorAll('[data-t]').forEach(b => { b.onclick = () => { me = pickable(b.dataset.t)[0]; draw(); }; });
       root.querySelectorAll('[data-c]').forEach(b => { b.onclick = () => { me = byId(b.dataset.c); draw(); }; });
     };
     draw(); root.hidden = false; root.scrollTop = 0;
