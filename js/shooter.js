@@ -188,6 +188,49 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
       for (const ev of ['pointerup', 'pointercancel']) cb.addEventListener(ev, crouchUp);
     }
   }
+  /* ---------------- phone aiming help: aim assist and optional auto-fire. Neither runs with a mouse. */
+  const HELP = { aim:true, auto:false };
+  try { Object.assign(HELP, JSON.parse(localStorage.getItem('wayo-aimhelp') || '{}')); } catch (e) {}
+  function setHelp(k, v){ HELP[k] = v; try { localStorage.setItem('wayo-aimhelp', JSON.stringify(HELP)); } catch (e) {} }
+  const LOCK_RANGE = 48;
+  // the enemy closest to your crosshair, if one is in clear view
+  function aimTarget(){
+    let best = null, bo = 1e9; const o = eye(), yaw = P.yaw, pitch = P.pitch, ads = S.adsT > 0.5;
+    for (const T of S.targets){
+      if (!T.alive) continue;
+      const aimY = T.y + R.STANCE[T.stance || 0].aimAt, dx = T.x - o[0], dy = aimY - o[1], dz = T.z - o[2], hd = Math.hypot(dx, dz), d = Math.hypot(hd, dy);
+      if (d < 0.5 || d > (W[S.me.weapon].scope && ads ? 120 : LOCK_RANGE)) continue;
+      const wy = Math.atan2(-dx, -dz), wp = Math.atan2(dy, hd), oy = wrapA(wy - yaw), op = wp - pitch, off = Math.hypot(oy, op), cone = (0.075 + 0.55 / d) * (ads ? 1.35 : 1);
+      if (off > cone || off >= bo) continue;
+      const u = [dx / d, dy / d, dz / d];
+      if (R.rayWorld(o, u, d, near) < d - 0.2) continue;
+      bo = off; best = { T, oy, op, off, d };
+    }
+    return best;
+  }
+  function tickAssist(dt){
+    S.autoFire = false;
+    if (!TOUCH){ return; }
+    S.assistAt = (S.assistAt || 0) - dt;
+    if (S.assistAt <= 0){ S.assistAt = 0.05; S.lock = S.me.alive && !S.climb ? aimTarget() : null; }
+    let L = S.lock; if (L && !L.T.alive) L = S.lock = null;
+    const m = moveState(), steering = Math.abs(P.yaw - (S.lastYaw ?? P.yaw)) + Math.abs(P.pitch - (S.lastPitch ?? P.pitch)) > 1e-4;
+    S.assistSlow = HELP.aim && L ? 0.62 : 1;
+    if (HELP.aim && L && (S.trigger || m.moving || steering || S.snapT > 0)){
+      // a gentle pull towards the chest, stronger while you fire or just after you aim in
+      const fresh = aimTarget() || L, k = 1 - Math.exp(-dt * (S.snapT > 0 ? 11 : S.trigger ? 5 : 3)), lim = (S.snapT > 0 ? 2.4 : 0.8) * dt;
+      P.yaw += Math.max(-lim, Math.min(lim, fresh.oy * k)); P.pitch += Math.max(-lim, Math.min(lim, fresh.op * k));
+    }
+    S.snapT = Math.max(0, (S.snapT || 0) - dt); if (S.adsT < 0.2 && S.ads) S.snapT = 0.22;
+    S.lastYaw = P.yaw; S.lastPitch = P.pitch;
+    // auto-fire: shoots by itself when the crosshair is on an enemy
+    if (HELP.auto && L && S.me.alive){
+      const f = S.me, w = W[f.weapon], o = eye();
+      if (w.melee) S.autoFire = L.d < w.reach + 0.4;
+      else if ((!w.scope || S.adsT > 0.85) && (!(w.pellets > 1) || L.d < 20)){ const h = R.traceShot(o, aimDir(), w.range, S.targets, near, f); S.autoFire = !!h.target; }
+    }
+  }
+
   /* ---------------- first-time guide: what each button does, shown on a small picture of the screen */
   const TIPS_KEY = 'wayo-tips-v1';
   const seenTips = () => { try { return !!localStorage.getItem(TIPS_KEY); } catch (e) { return true; } };
@@ -785,7 +828,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   const STAND = { WALK, RUN, fov:camera.fov };
   /* ---------------- how your body moves: head bob, footsteps, sprinting, landing */
   function tickBody(dt){
-    const speed = Math.hypot(S.vx, S.vz), m = moveState(), alive = S.me.alive, sprint = !S.stance && m.running && !S.ads && !S.trigger && speed > 4.5 && alive && !S.climb;
+    const speed = Math.hypot(S.vx, S.vz), m = moveState(), alive = S.me.alive, sprint = !S.stance && m.running && !S.ads && !S.trigger && !S.autoFire && speed > 4.5 && alive && !S.climb;
     S.sprintT += ((sprint ? 1 : 0) - S.sprintT) * Math.min(1, dt * 11);
     if (P.onGround && !S.wasGround && !S.climb){ S.land = 1; footstep(true, 1.5); } S.wasGround = P.onGround; S.land = Math.max(0, S.land - dt * 5);
     let bobY = 0, bobX = 0, roll = 0;
@@ -904,7 +947,8 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     f = S.me;
     if (S.br) tickItems(dt);
     const canShoot = S.sprintT < 0.35 && !S.climb && !(S.fight && (S.team ? S.round.freeze > 0 : S.br ? S.br.freeze > 0 : false));
-    if (canShoot && (S.pressed || (S.trigger && w.auto))){
+    if (S.autoFire && !w.auto && R.canFire(f, S.now)) S.pressed = true;
+    if (canShoot && (S.pressed || ((S.trigger || S.autoFire) && w.auto))){
       const fired = shoot();
       if (fired && w.scope) setTimeout(() => { if (S.active){ click(0.2, 1300); setTimeout(() => S.active && click(0.22, 1800), 240); } }, 380);
       if (!fired && S.pressed && !w.melee && f.ammo[f.weapon].mag === 0 && !R.reloading(f, S.now) && !R.startReload(f, S.now)) dry();
@@ -915,9 +959,9 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     if (!S.trigger && S.recoverDebt > 0){ const d = Math.min(S.recoverDebt, S.recoverDebt * dt * 7 + 0.0004); P.pitch -= d; S.recoverDebt -= d; } 
     const stanceSpeed = R.STANCE[S.stance].speed;
     WALK = STAND.WALK * w.moveMul * (S.ads ? 0.62 : 1) * stanceSpeed;
-    RUN = S.stance ? WALK : STAND.RUN * w.moveMul * (S.ads || S.trigger ? 0.62 : 1);
-    SENS = S.baseSens * (w.scope && S.adsT > 0.5 ? 0.3 : 1 - S.adsT * 0.35);
-    tickLadder(dt); tickBody(dt);
+    RUN = S.stance ? WALK : STAND.RUN * w.moveMul * (S.ads || S.trigger || S.autoFire ? 0.62 : 1);
+    SENS = S.baseSens * (w.scope && S.adsT > 0.5 ? 0.3 : 1 - S.adsT * 0.35) * (S.assistSlow || 1);
+    tickAssist(dt); tickLadder(dt); tickBody(dt);
     const fov = STAND.fov + ((w.zoom || STAND.fov) - STAND.fov) * S.adsT; if (Math.abs(camera.fov - fov) > 0.01){ camera.fov = fov; camera.updateProjectionMatrix(); }
     if (S.fight) tickBots(dt); else tickTargets(dt);
     tickFx(dt); drawGun(dt); drawCross(dt); drawHud(); drawBars(); tickSpec();
@@ -947,6 +991,13 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     const k = 1 - Math.exp(-dt * (P.onGround ? 11 : 2.5)); S.vx += (mx - S.vx) * k; S.vz += (mz - S.vz) * k;
     return S.climb ? [0, 0] : [S.vx, S.vz];
   }
-  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, momentum, noJump, setStance, mapDots, play, showTips };
+  return { start, stop, tick, render, S, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, momentum, noJump, setStance, mapDots, play, showTips, HELP, setHelp };
 })();
 window.SHOOTER = SHOOTER;
+// aim settings on the menu are for phones only
+if (TOUCH){
+  const q = s => document.querySelector(s), H = SHOOTER.HELP;
+  q('#helpRow').hidden = false; q('#aimIn').value = H.aim ? '1' : '0'; q('#autoIn').value = H.auto ? '1' : '0';
+  q('#aimIn').addEventListener('change', e => SHOOTER.setHelp('aim', e.target.value === '1'));
+  q('#autoIn').addEventListener('change', e => SHOOTER.setHelp('auto', e.target.value === '1'));
+}
