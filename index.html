@@ -174,6 +174,7 @@ body:has(#endCard:not([hidden])) #touch,body:has(#endCard:not([hidden])) #gbtns,
 
 <canvas id="view"></canvas>
 <div id="cross" hidden></div>
+<div id="fpsBox" hidden style="position:fixed;left:50%;top:26px;transform:translateX(-50%);z-index:8;font:700 11px/1 Arial,sans-serif;color:#fff;text-shadow:0 1px 2px #000;pointer-events:none"></div>
 
 <div class="hud" id="top">
   <div id="where"><b id="streetName">Otigba Street</b><small id="coords">Computer Village · Ikeja</small></div>
@@ -254,6 +255,7 @@ body:has(#endCard:not([hidden])) #touch,body:has(#endCard:not([hidden])) #gbtns,
       </details>
       <div class="ctlRow"><label for="layIn">Buttons</label><select id="layIn"><option value="auto">Auto (fits your phone)</option><option value="compact">Compact · short phones</option><option value="classic">Classic · most phones</option><option value="wide">Wide · long phones</option></select>
         <select id="sizeIn" aria-label="Button size"><option value="0.85">Small</option><option value="1" selected>Medium</option><option value="1.15">Large</option></select></div>
+      <div class="ctlRow lookRow" id="gfxRow"><label for="gfxIn">Graphics</label><select id="gfxIn"><option value="auto">Auto</option><option value="high">High</option><option value="low">Low</option></select><label for="fpsIn">Show FPS</label><select id="fpsIn"><option value="0">Off</option><option value="1">On</option></select></div>
       <div class="ctlRow" id="helpRow" hidden><label for="aimIn">Aim assist</label><select id="aimIn"><option value="1">On</option><option value="0">Off</option></select><label for="autoIn">Auto-fire</label><select id="autoIn"><option value="0">Off</option><option value="1">On</option></select></div>
       <div class="ctlRow lookRow"><label for="sensIn">Look speed</label><select id="sensIn"><option value="0.5">Very slow</option><option value="0.7">Slow</option><option value="1" selected>Normal</option><option value="1.4">Fast</option><option value="1.9">Very fast</option></select></div>
       <p id="iosTip" hidden>On iPhone, tap Share → <b>Add to Home Screen</b> and open the game from there to play full screen.</p>
@@ -291,6 +293,13 @@ function shade(col, f){ const c = col.clone(); c.r = Math.min(1, c.r * f); c.g =
 function jitter(col, r, amt = 0.06){ return shade(col, 1 + (r() - 0.5) * 2 * amt); }
 function toast(msg, ms = 2400){ const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, ms); }
 const TOUCH = matchMedia('(pointer:coarse)').matches;
+// graphics level: Auto drops to Low on phones with 4GB of memory or less. Changing it reloads the game.
+const GFX = (() => {
+  let pick = 'auto'; try { pick = localStorage.getItem('wayo-gfx') || 'auto'; } catch (e) {}
+  const q = new URLSearchParams(location.search).get('gfx'); if (q) pick = q;
+  const weak = TOUCH && ((navigator.deviceMemory || 8) <= 4 || (navigator.hardwareConcurrency || 8) <= 4);
+  return { pick, weak, low:pick === 'low' || (pick === 'auto' && weak) };
+})();
 
 /* =====================================================================
    geometry batches: static geometry merged per material
@@ -507,15 +516,16 @@ function noiseTex(base, var1, n, extra){
    scene: renderer, sun matched to the sky photo, image-based lighting
    ===================================================================== */
 const canvas = $('#view');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias:!TOUCH, powerPreference:'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, TOUCH ? 1.5 : 2));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:!TOUCH && !GFX.low, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, GFX.low ? 1 : TOUCH ? 1.5 : 2));
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = GFX.low ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+if (GFX.low) renderer.shadowMap.autoUpdate = false;   // low: draw the sun's shadows once, the sun never moves
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xa9c4e2);
 const FOG = 0xc9d6e3;
-scene.fog = new THREE.Fog(FOG, 80, 360);
+scene.fog = GFX.low ? new THREE.Fog(FOG, 55, 210) : new THREE.Fog(FOG, 80, 360);
 const camera = new THREE.PerspectiveCamera(70, 1, 0.08, 1200);
 
 // the sun sits where it is in the sky photo (kloofendal 48d, ~47 degrees up)
@@ -523,7 +533,7 @@ const SUN_DIR = new THREE.Vector3(0.566, 0.731, 0.379).normalize();
 const hemi = new THREE.HemisphereLight(0xd4e3f5, 0x8a6a50, 0.28); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff1dc, 2.5);
 sun.castShadow = true;
-const SMAP = window.__TEST ? 2048 : TOUCH ? 2048 : 4096;
+const SMAP = GFX.low ? 1024 : window.__TEST ? 2048 : TOUCH ? 2048 : 4096;
 sun.shadow.mapSize.set(SMAP, SMAP);
 Object.assign(sun.shadow.camera, { left:-92, right:92, top:92, bottom:-92, near:5, far:360 });
 sun.shadow.bias = -0.00035; sun.shadow.normalBias = 0.035;
@@ -585,9 +595,10 @@ async function loadAll(onProg){
   });
   for (const k of TEX_KEYS){
     TEX[k] = {};
-    for (const [suf, srgb] of [['d', true], ['n', false]]) tasks.push(async () => {
+    for (const [suf, srgb] of GFX.low ? [['d', true]] : [['d', true], ['n', false]]) tasks.push(async () => {   // low skips the surface-detail maps
       const t = await withRetry(texL, 'tex/' + k + '_' + suf + '.jpg');
-      if (t){ t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso; if (srgb) t.encoding = THREE.sRGBEncoding; TEX[k][suf] = t; }
+      if (t && GFX.low && t.image && t.image.width > 512){ const c = document.createElement('canvas'), f = 512 / t.image.width; c.width = 512; c.height = Math.max(1, Math.round(t.image.height * f)); c.getContext('2d').drawImage(t.image, 0, 0, c.width, c.height); t.image = c; t.needsUpdate = true; }
+      if (t){ t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = GFX.low ? 2 : aniso; if (srgb) t.encoding = THREE.sRGBEncoding; TEX[k][suf] = t; }
       tick();
     });
   }
@@ -598,7 +609,18 @@ async function loadAll(onProg){
   });
   await pool(tasks, 6);
 }
+// low graphics: shrink a model's textures and drop its surface-detail maps to save memory
+function shrinkTex(t, max){
+  if (!t || !t.image || t.__small || t.image.width <= max) return;
+  const c = document.createElement('canvas'), f = max / Math.max(t.image.width, t.image.height); c.width = Math.max(1, Math.round(t.image.width * f)); c.height = Math.max(1, Math.round(t.image.height * f));
+  c.getContext('2d').drawImage(t.image, 0, 0, c.width, c.height); t.image = c; t.__small = true; t.needsUpdate = true;
+}
+function lightenModel(root, max){
+  if (!GFX.low) return;
+  root.traverse(o => { if (!o.isMesh) return; for (const m of Array.isArray(o.material) ? o.material : [o.material]){ shrinkTex(m.map, max); shrinkTex(m.roughnessMap, max / 2); shrinkTex(m.metalnessMap, max / 2); shrinkTex(m.aoMap, max / 2); if (m.normalMap){ m.normalMap.dispose(); m.normalMap = null; m.needsUpdate = true; } } });
+}
 function registerProp(name, root){
+  lightenModel(root, 256);
   root.updateMatrixWorld(true);
   const parts = [];
   root.traverse(o => {
@@ -1024,6 +1046,7 @@ function prop(name, x, y, z, ry, s = 1, o = {}){
   if (THIN.has(name) && thinHash(x, z) < 0.5) return null;
   // second cut (Oct 2026 playtest): half of everything a trader could turn into, so hunters have a fair search
   if (!KEEP_ALL.has(name) && y < 2.5 && thinHash(x * 1.7 + 3.1, z * 0.9 - 7.3) < 0.6) return null;
+  if (GFX.low && !o.collide && !KEEP_ALL.has(name) && thinHash(x * 2.3 - 1.7, z * 1.3 + 5.9) < 0.45) return null;   // low: fewer loose props, none you could bump into
   const it = { x, y, z, ry, s, tint:o.tint ? hex(o.tint) : null };
   P0.list.push(it);
   if (o.collide){
@@ -1041,7 +1064,7 @@ function buildInstances(){
   for (const name in PR){
     const P0 = PR[name], L = P0.list; if (!L.length) continue;
     const size = propSize(name);
-    const cull = size > 3 ? 260 : size > 1.2 ? 80 : size > 0.6 ? 52 : 34;
+    const cull = (size > 3 ? 260 : size > 1.2 ? 80 : size > 0.6 ? 52 : 34) * (GFX.low ? 0.6 : 1);
     const mats = new Float32Array(L.length * 16), m = new THREE.Matrix4();
     L.forEach((it, i) => { _qq.setFromAxisAngle(_yaxis, it.ry); m.compose(_v3.set(it.x, it.y, it.z), _qq, _s3.set(it.s, it.s, it.s)); m.toArray(mats, i * 16); });
     const tinted = L.some(it => it.tint);
@@ -1053,9 +1076,10 @@ function buildInstances(){
       for (let i = 0; i < L.length; i++){ t.fromArray(mats, i * 16).multiply(part.m4); t.toArray(pm, i * 16); }
       im.instanceMatrix.array.set(pm);
       if (cols){ im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cols), 3); }
-      im.castShadow = size > 0.95; im.receiveShadow = true; im.frustumCulled = false;
+      im.castShadow = size > (GFX.low ? 2 : 0.95); im.receiveShadow = true; im.frustumCulled = false;
       scene.add(im);
-      INST.push({ im, L, pm, cols, cull2:cull * cull });
+      const tris = (part.geo.index ? part.geo.index.count : part.geo.attributes.position.count) / 3, partCull = GFX.low && tris > 2500 ? Math.min(cull, 64) : cull;   // low: heavy models only up close
+      INST.push({ im, L, pm, cols, cull2:partCull * partCull });
     }
   }
 }
@@ -1428,7 +1452,8 @@ async function buildWorld(prog = () => {}){
   shelf.wrapS = shelf.wrapT = THREE.RepeatWrapping;
   await step(0.08, 'Laying the roads');
   buildGround(); buildSkyline(); mark('ground');
-  const BL = LAYOUT.buildings;
+  // low: skip the far background blocks, the fog hides that distance anyway
+  const BL = GFX.low ? LAYOUT.buildings.filter(b => b.play || inPlay(b.cx, b.cz, 45)) : LAYOUT.buildings;
   for (let i = 0; i < BL.length; i += 12){
     await step(0.12 + 0.5 * i / BL.length, `Putting up buildings ${i} / ${BL.length}`);
     BL.slice(i, i + 12).forEach(buildBuilding);
@@ -1964,10 +1989,10 @@ const GAME = (() => {
     const tp = anim.animations.find(c => c.name === 'TPose');
     if (tp){ const mx = new THREE.AnimationMixer(anim.scene); mx.clipAction(tp).play(); mx.update(0); anim.scene.updateMatrixWorld(true); }
     Object.keys(CHAR_FILES).forEach((name, i) => {
-      const g = gs[i], root = g.scene;
+      const g = gs[i], root = g.scene; lightenModel(root, 512);
       // compressed models store bone weights as whole numbers; turn them back into 0–1 so CPU-side bone maths (sizing) is right
       root.traverse(o => { const w = o.isSkinnedMesh && o.geometry.attributes.skinWeight; if (w && w.normalized && !(w.array instanceof Float32Array)){ const d = w.array instanceof Uint16Array ? 65535 : 255, f = new Float32Array(w.array.length); for (let i = 0; i < f.length; i++) f[i] = w.array[i] / d; o.geometry.setAttribute('skinWeight', new THREE.BufferAttribute(f, w.itemSize)); } });
-      root.traverse(o => { if (o.isMesh){ o.castShadow = true; o.frustumCulled = false; if (o.material){ o.material.envMapIntensity = 0.7; if (o.material.map) o.material.map.anisotropy = 4; } } });
+      root.traverse(o => { if (o.isMesh){ o.castShadow = !GFX.low; o.frustumCulled = false; if (o.material){ o.material.envMapIntensity = 0.7; if (o.material.map) o.material.map.anisotropy = 4; } } });
       const box = skinnedBox(root), h = box.max.y - box.min.y;
       S.chars[name] = { root, scale:CHAR_FILES[name] / h, minY:box.min.y };
       S.clips[name] = {};
@@ -3585,10 +3610,11 @@ let slowSecs = 0, qualityStep = 0;
 function adaptQuality(fps){
   if (!started || document.hidden) return;
   slowSecs = fps < 40 ? slowSecs + 1 : 0;
-  if (slowSecs < 3 || qualityStep >= 2) return;
+  if (slowSecs < 3 || qualityStep >= 3) return;
   slowSecs = 0; qualityStep++;
   if (qualityStep === 1){ renderer.setPixelRatio(Math.min(devicePixelRatio, 1)); resize(); }
-  else { sun.shadow.mapSize.set(512, 512); if (sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map = null; } }
+  else if (qualityStep === 2){ sun.shadow.mapSize.set(512, 512); if (sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map = null; } renderer.shadowMap.needsUpdate = true; }
+  else if (fps < 26){ renderer.setPixelRatio(0.75); resize(); }   // last resort: softer picture, steadier game
   console.log('quality step', qualityStep);
 }
 function resize(){ const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
@@ -3611,7 +3637,7 @@ function frameLoop(now){
   if (window.SHOOTER) SHOOTER.render();
   if (now - lastLabel > 250){ lastLabel = now; updateLabel(); }
   drawMap();
-  fpsAcc += dt; fpsN++; if (fpsAcc > 1){ window.__fps = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0; adaptQuality(window.__fps); }
+  fpsAcc += dt; fpsN++; if (fpsAcc > 1){ window.__fps = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0; adaptQuality(window.__fps); const fb = $('#fpsBox'); if (!fb.hidden) fb.textContent = window.__fps + ' FPS'; }
   requestAnimationFrame(frameLoop);
 }
 
@@ -3653,6 +3679,7 @@ addEventListener('unhandledrejection', e => { if (!window.__ready) showError(e.r
     $('#bar').classList.add('done');
     $('#load').textContent = ''; $('#loadBox').hidden = true;
     $('#btnCreate').disabled = $('#btnPractice').disabled = $('#btnRange').disabled = $('#btnBots').disabled = $('#btnTeam').disabled = $('#btnBR').disabled = !GAME.S.ready; if (LOBBY.inRoom()) LOBBY.renderRoom();
+    if (GFX.low) renderer.shadowMap.needsUpdate = true;
     window.__ready = true;
     MUSIC.preload();   // fetch the lobby song only once the game itself is loaded
     requestAnimationFrame(frameLoop);
@@ -3698,6 +3725,11 @@ $('#sizeIn').addEventListener('change', e => { try { localStorage.setItem('ron-s
 addEventListener('resize', applyLayout); applyLayout();
 $('#sensIn').value = String(SENS); if (!$('#sensIn').value) $('#sensIn').value = '1';
 $('#sensIn').addEventListener('change', e => { SENS = +e.target.value || 1; try { localStorage.setItem('wayo-sens', String(SENS)); } catch (_) {} });
+$('#gfxIn').value = ['auto', 'high', 'low'].includes(GFX.pick) ? GFX.pick : 'auto';
+if (GFX.pick === 'auto' && GFX.low) $('#gfxIn').options[0].textContent = 'Auto (Low)';
+$('#gfxIn').addEventListener('change', e => { try { localStorage.setItem('wayo-gfx', e.target.value); } catch (err) {} location.reload(); });
+try { if (localStorage.getItem('wayo-fps') === '1'){ $('#fpsIn').value = '1'; $('#fpsBox').hidden = false; } } catch (e) {}
+$('#fpsIn').addEventListener('change', e => { const on = e.target.value === '1'; $('#fpsBox').hidden = !on; try { localStorage.setItem('wayo-fps', on ? '1' : '0'); } catch (err) {} });
 LOBBY.init();
 // lobby music: browsers only allow sound after a tap, so it starts on the first touch of the start screen
 function syncMusicBtn(){ const b = $('#musicBtn'); b.textContent = MUSIC.isOn() ? 'Music on' : 'Music off'; b.setAttribute('aria-pressed', String(MUSIC.isOn())); }
