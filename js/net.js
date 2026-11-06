@@ -4,7 +4,7 @@
    ===================================================================== */
 const NET = (() => {
   const params = new URLSearchParams(location.search);
-  const SERVER = params.get('server') || 'wss://kasala-game.__SUBDOMAIN__.workers.dev';
+  const SERVER = params.get('server') || 'wss://kasala-game.kasala.workers.dev';
   const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', el = s => document.querySelector(s);
   const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; };
   const esc = s => String(s).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
