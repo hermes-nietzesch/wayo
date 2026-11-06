@@ -1,0 +1,6 @@
+// Hosts the Kasala game page on Cloudflare (the "kasala" Worker). The game server lives in server/game.
+{
+  "name": "kasala",
+  "compatibility_date": "2026-01-01",
+  "assets": { "directory": "./" }
+}
