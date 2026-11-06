@@ -73,12 +73,14 @@ const NET = (() => {
     s.onclose = () => { if (ws !== s) return; ws = null; if (inMatch){ inMatch = false; SHOOTER.netLost(); } if (!joined) say('Could not reach the game server'); else if (quickMode) online('You lost the connection'); else menu('You lost the connection to the room'); };
   }
   const send = m => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
-  function leave(){ const s = ws; ws = null; inMatch = false; room = null; quickMode = null; clearInterval(waitTimer); if (s) try { s.close(); } catch (e) {} }
+  function leave(){ if (window.KVOICE) KVOICE.stop(); const s = ws; ws = null; inMatch = false; room = null; quickMode = null; clearInterval(waitTimer); if (s) try { s.close(); } catch (e) {} }
   function receive(m){
     if (Array.isArray(m)){ SHOOTER.netMsg(m); return; }
     if (m.t === 'err') return quickMode ? online(m.m) : menu(m.m);
     if (m.t === 'lobby'){ room = m; if (!inMatch) (m.public ? showWait() : showRoom()); return; }
     if (m.t === 'n') return SHOOTER.netNote(m.m);
+    if (m.t === 'sig') return window.KVOICE && KVOICE.onSig(m.from, m.d);
+    if (m.t === 'talk') return window.KVOICE && KVOICE.onTalk(m.from, m.on);
     if (m.t === 'start') begin(m);
   }
   function showWait(){
@@ -111,8 +113,12 @@ const NET = (() => {
     inMatch = true; clearInterval(waitTimer); page('<h2>Getting fighters ready…</h2><p>The match starts when everyone has loaded.</p>');
     try { await SHOOTER.netPrep(m); } catch (e) { console.warn(e); leave(); return menu('Check your connection and try again'); }
     hide(); const mode = m.mode === 'brsq' ? 'br' : m.mode, pub = m.public ? m.mode : null;
-    SHOOTER.start({ mode, squad:m.mode === 'brsq', diff:m.diff, net:{ m, send, leave, public:!!pub, toRoom:() => { inMatch = false; if (pub){ leave(); online(); skip = []; tries = 0; quick(pub, myName()); } else if (ws && room) showRoom(); else menu(); } } });
+    SHOOTER.start({ mode, squad:m.mode === 'brsq', diff:m.diff, net:{ m, send, leave, public:!!pub, toRoom:() => { inMatch = false; if (window.KVOICE) KVOICE.stop(); if (pub){ leave(); online(); skip = []; tries = 0; quick(pub, myName()); } else if (ws && room) showRoom(); else menu(); } } });
     send({ t:'ready' });
+    // team voice: the other people on my side, if this mode has sides
+    const myTeam = m.roster[m.you].team, mates = {};
+    if (myTeam != null) m.roster.forEach((r, i) => { if (r.human && i !== m.you && r.team === myTeam) mates[i] = r.name; });
+    if (window.KVOICE) KVOICE.start(send, m.you, mates);
   }
   function ready(){ const b = el('#btnFriends'), o = el('#btnOnline'); if (b){ b.disabled = false; b.onclick = () => menu(); } if (o){ o.disabled = false; o.onclick = () => online(); } if (params.get('room') && !ws) menu(); }
   return { ready, menu, online };

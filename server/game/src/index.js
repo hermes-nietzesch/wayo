@@ -98,6 +98,14 @@ export class Room extends DurableObject {
       else if (a.t === 'char' && factionOf(a.char)){ p.char = a.char; this.lobby(); }
       else if (a.t === 'opt' && p.host){ if (BOTS.DIFF[a.diff]) this.diff = a.diff; if (MODES[a.mode]) this.mode = a.mode; this.lobby(); }
       else if (a.t === 'start' && p.host) this.startMatch();
+    } else if ((a.t === 'sig' || a.t === 'talk') && p.idx != null){
+      // voice: pass call setup and talking lights only between people on the same side
+      const me = this.F[p.idx]; if (!me || me.team == null) return;
+      for (const q of this.people.values()){
+        if (q === p || q.idx == null || (a.t === 'sig' && q.idx !== a.to)) continue;
+        const f = this.F[q.idx]; if (!f || f.isBot || f.team !== me.team) continue;
+        this.send(q, a.t === 'sig' ? { t:'sig', from:p.idx, d:a.d } : { t:'talk', from:p.idx, on:!!a.on });
+      }
     } else if (a.t === 'ready'){ p.ready = true; if (this.phase === 'load') this.tryGo(); else if (this.round) this.send(p, this.roundMsg()); }
   }
   /* ---------------- starting a match */
