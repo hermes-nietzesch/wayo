@@ -27,4 +27,5 @@ export function groundAt(x, z, fromY){
 }
 const a = DATA.area, S = 1.5, W = Math.ceil((a[2] - a[0]) / S), OPEN = new Set(DATA.cells);
 export const nav = BOTS.makeNav(a, (x, z) => OPEN.has(Math.floor((x - a[0]) / S) + Math.floor((z - a[1]) / S) * W));
+export const AREA = a, LOOT = DATA.loot;
 export { R, BOTS };

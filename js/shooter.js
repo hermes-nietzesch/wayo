@@ -584,7 +584,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
       el('#shHpN').textContent = hp; el('#shHpBar').style.width = hp + '%'; el('#shHp').classList.toggle('low', hp <= 35);
     } else if (S.fight){
       const top = S.bots.reduce((a, b) => b.kills > a.kills ? b : a, S.bots[0]), hp = Math.max(0, Math.ceil(f.hp));
-      el('#shStats').innerHTML = `First to ${FFA_GOAL} · You <b>${f.kills}</b> · Top bot <b>${top.name} ${top.kills}</b> · Deaths <b>${f.deaths}</b> · ${clock(S.ffaT)}`;
+      el('#shStats').innerHTML = `First to ${FFA_GOAL} · You <b>${f.kills}</b> · ${S.net ? 'Leader' : 'Top bot'} <b>${top.name} ${top.kills}</b> · Deaths <b>${f.deaths}</b> · ${clock(S.ffaT)}`;
       el('#shHpN').textContent = hp; el('#shHpBar').style.width = hp + '%'; el('#shHp').classList.toggle('low', hp <= 35);
     } else el('#shStats').innerHTML = `Hits <b>${st.hits}</b> · Headshots <b>${st.heads}</b> · Down <b>${st.kills}</b> · Accuracy <b>${st.shots ? Math.round(st.hits / st.shots * 100) : 0}%</b>`;
   }
@@ -864,9 +864,9 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   function tickBots(dt){
     const Wd = botWorld(); let f = S.me; f.x = P.x; f.y = P.y; f.z = P.z; f.stance = S.stance; f.proneYaw = Math.atan2(-Math.sin(P.yaw), -Math.cos(P.yaw)); const m = moveState(); f.speed = m.moving ? (m.running ? 7 : 4.3) : 0;
     if (S.deadT > 0 && S.oneLife){ S.deadT -= dt; if (S.deadT <= 0){ if (S.br && !S.squad) finishBR(); else enterSpec(); } }
-    else if (S.deadT > 0){ S.deadT -= dt; if (S.deadT <= 0){ const keep = { kills:f.kills, deaths:f.deaths, w:f.weapon }; const s = farSpot(); S.me = Object.assign(R.newFighter({ weapon:keep.w }), { kills:keep.kills, deaths:keep.deaths, x:s[0], z:s[1], A:f.A, fall:f.fall }); standUp(S.me); Wd.fighters[0] = S.me; P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); P.frozen = false; P.vy = 0; el('#shDead').hidden = true; setStance(0); } }
+    else if (S.deadT > 0){ S.deadT -= dt; if (S.deadT <= 0 && !S.net){ const keep = { kills:f.kills, deaths:f.deaths, w:f.weapon }; const s = farSpot(); S.me = Object.assign(R.newFighter({ weapon:keep.w }), { kills:keep.kills, deaths:keep.deaths, x:s[0], z:s[1], A:f.A, fall:f.fall }); standUp(S.me); Wd.fighters[0] = S.me; P.x = s[0]; P.z = s[1]; P.y = groundAt(s[0], s[1], 2); P.frozen = false; P.vy = 0; el('#shDead').hidden = true; setStance(0); } }
     for (const b of S.bots){
-      if (!b.alive){ if (!S.oneLife) b.deadT -= dt; if (b.deadT <= 0){ BOTS.respawn(b, farSpot(), Wd); standUp(b); } else { tickFall(b, dt); continue; } }
+      if (!b.alive){ if (!S.oneLife && !S.net) b.deadT -= dt; if (b.deadT <= 0 && !S.net){ BOTS.respawn(b, farSpot(), Wd); standUp(b); } else { tickFall(b, dt); continue; } }
       if (S.net) netMove(b, dt); else if (held()){ b.speed = 0; b.vx = b.vz = 0; } else BOTS.step(b, dt, Wd);
       b.A.root.position.set(b.x, b.y, b.z); b.A.root.rotation.set(0, b.aimYaw, 0);
       animBody(b, dt);
@@ -887,11 +887,11 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     const m = link.m, side = m.roster[m.you].team; S.netSide = side; S.map = [];
     m.roster.forEach((r, i) => {
       if (i === m.you){ S.map[i] = S.me; return; }
-      const team = r.team === side ? 0 : 1, b = R.newFighter({ id:'n' + i, team, weapon:r.weapon });
+      const team = r.team == null ? 1 : r.team === side ? 0 : 1, b = R.newFighter({ id:'n' + i, team, weapon:r.weapon, loadout:S.br ? [r.weapon] : undefined });
       Object.assign(b, { name:r.name, ry:0, aimYaw:0, aimPitch:0, speed:0, stance:0, vx:0, vz:0, kills:0, deaths:0, buf:[] });
       b.A = GAME.debug.makeAvatar(r.char); outfit(b); b.A.gearId = b.weapon; addBar(b, team === 0); S.bots.push(b); S.W.fighters.push(b); S.map[i] = b;
     });
-    S.me.team = 0;
+    S.me.team = side == null ? null : 0;
   }
   function netMove(b, dt){
     const B = b.buf, t = netClock(); if (!B.length) return;
@@ -929,7 +929,16 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
         f.buf.push([t, ...r]); if (f.buf.length > 10) f.buf.shift();
         const gun = R.ORDER[r[10]]; if (gun && gun !== f.weapon){ f.weapon = gun; f.A.gearId = gun; regear(f); }
       });
+      const X = a[3];
+      if (X && S.br){ const Z = S.br.zone; [Z.cx, Z.cz, Z.r, Z.t, Z.phase] = X; Z.shrinking = !!X[5]; Z.done = !!X[6]; Z.dps = X[7]; }
+      else if (X && !S.team) S.ffaT = X[0];
     } else if (k === 'R') netRound(a);
+    else if (k === 'G') netGo(a);
+    else if (k === 'P') netSpawn(a[1], a.slice(2));
+    else if (k === 't'){
+      const it = S.items[a[1]], who = F[a[2]]; if (!it || it.gone) return;
+      if (who === S.me){ R.takeItem(S.me, it); itemTaken(it, S.me); } else itemTaken(it, who);
+    }
     else if (k === 'f'){
       const b = F[a[1]]; if (!b || b === S.me) return;
       const id = R.ORDER[a[2]], d0 = Math.hypot(b.x - camera.position.x, b.z - camera.position.z); bang(id, Math.max(1, d0)); b.A.flashT = 0.05;
@@ -941,14 +950,45 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
       if (T === S.me){ S.me.hp = Math.max(0, S.me.hp - dmg); hurtMe(dmg, by); }
       if (by === S.me){ floatNum(a[5], a[6], a[7], dmg, head); hitMark(head); click(0.22, head ? 4800 : 3400); S.stats.hits++; if (head) S.stats.heads++; if (T !== S.me){ T.lastHitBy = S.me; T.meHitAt = S.now; } }
     } else if (k === 'k'){
-      const T = F[a[1]], by = F[a[2]]; if (!T.alive && T.fall) return; T.alive = false; T.hp = 0; if (T === S.me){ setTrigger(false); } downed(T, by);
+      const T = F[a[1]], by = a[2] < 0 ? null : F[a[2]]; if (!T || !T.alive && T.fall) return; T.alive = false; T.hp = 0; if (T === S.me){ setTrigger(false); } downed(T, by);
     } else if (k === 'r'){
       const r = S.round; r.done = true; r.over = 1e9; const w = a[1] === null ? null : a[1] === S.netSide ? 0 : 1, names = S.plan.names, mine = w === 0;
       S.score = S.netSide === 0 ? [a[3], a[4]] : [a[4], a[3]];
       banner(w === null ? 'Draw' : mine ? 'Round won' : 'Round lost', a[2] === 'time' ? 'Time up' : `${names[1 - (w ?? 0)]} wiped out`, w === null ? '' : mine ? 'win' : 'lose'); thump(0.3, mine ? 220 : 110, 0.4);
     } else if (k === 'E'){
-      S.score = S.netSide === 0 ? [a[1], a[2]] : [a[2], a[1]]; a[3].forEach((v, i) => { F[i].kills = v[0]; F[i].deaths = v[1]; }); showEnd();
+      a[3].forEach((v, i) => { F[i].kills = v[0]; F[i].deaths = v[1]; if (S.br){ F[i].alive = !!v[2]; if (F[i] === S.me && v[3]) S.br.place = v[3]; } });
+      if (S.team){ S.score = S.netSide === 0 ? [a[1], a[2]] : [a[2], a[1]]; showEnd(); }
+      else if (S.br){ S.br.endIn = 0; finishBR(); }
+      else finishFFA();
     }
+  }
+  function netBR(m){
+    const c = LAYOUT.play, mx = (c[0] + c[2]) / 2, mz = (c[1] + c[3]) / 2;
+    S.items = (m.items || []).map(([kind, wi, x, y, z, roof], i) => { const it = { i, kind, weapon:R.ORDER[wi] || '', x, y, z, roof:!!roof }; it.m = itemMesh(it); it.m.position.set(x, y, z); it.m.userData.ph = Math.random() * 6; scene.add(it.m); return it; });
+    S.W.items = S.items;
+    const Z = { cx:mx, cz:mz, r:112, t:45, phase:0, shrinking:false, done:false, dps:3 }; S.W.zone = Z;
+    Object.assign(S.br, { zone:Z, freeze:999, endIn:0, tick:0, place:0 });
+    const wall = new THREE.Mesh(ZONEG, ZONEM); wall.renderOrder = 1; scene.add(wall); S.br.wall = wall;
+  }
+  // everyone's starting spot, for free-for-all and battle royale
+  function netGo(a){
+    const [, spawns, freeze, ffaT] = a; S.ffaT = ffaT;
+    spawns.forEach((p, i) => netSpawn(i, p));
+    if (S.br) S.br.freeze = freeze;
+    P.frozen = freeze > 0; banner(S.br ? 'Battle royale' : 'Free-for-all', S.br ? (S.squad ? 'Last team standing · find weapons fast' : 'Last one standing · find weapons fast') : 'First to 15 kills');
+    if (!S.br) setTimeout(() => { if (S.active) { P.frozen = false; banner(); } }, freeze * 1000);
+  }
+  function netSpawn(i, [x, z, y, ry]){
+    const f = S.map[i]; if (!f) return;
+    if (f === S.me){
+      const A = f.A; if (f.fall && f.fall.pool) scene.remove(f.fall.pool);
+      const keep = { kills:f.kills, deaths:f.deaths, w:f.weapon, owned:f.owned, ammo:f.ammo, armor:f.armor };
+      S.me = Object.assign(R.newFighter({ weapon:keep.w, team:f.team, loadout:keep.owned ? Object.keys(keep.owned).filter(k => keep.owned[k]) : undefined }), { kills:keep.kills, deaths:keep.deaths, x, z, y, A, aimYaw:ry, ry, fall:null });
+      if (S.br && keep.ammo){ S.me.ammo = keep.ammo; S.me.armor = keep.armor || 0; }
+      S.map[i] = S.me; S.W.fighters[0] = S.me; A.root.visible = false; A.root.rotation.set(0, 0, 0);
+      P.x = x; P.z = z; P.y = y; P.vy = 0; P.pitch = 0; P.yaw = ry - Math.PI; S.vx = S.vz = 0; S.deadT = 0; S.climb = null; P.frozen = false;
+      S.stance = 1; setStance(0); S.eyeDrop = 0; el('#shDead').hidden = true;
+    } else { Object.assign(f, { x, z, y, ry, aimYaw:ry, hp:f.maxHp, alive:true, speed:0, vx:0, vz:0, buf:[], meHitAt:0 }); standUp(f); }
   }
   function netLost(){ if (!S.active) return; toast('You lost the connection to the match', 3000); stop(); }
   const netNote = m => { if (S.active) feed(m.replace(/[<>&]/g, '')); };
@@ -957,6 +997,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   /* ---------------- free-for-all: first to the kill target wins, or most kills when time runs out */
   const FFA_GOAL = 15, FFA_TIME = 360;
   function tickFFA(dt){
+    if (S.net){ S.ffaT = Math.max(0, S.ffaT - dt); return; }
     if (S.ffaEnd > 0){ S.ffaEnd -= dt; if (S.ffaEnd <= 0) finishFFA(); return; }
     S.ffaT -= dt;
     const lead = S.W.fighters.reduce((a, b) => (b.kills || 0) > (a.kills || 0) ? b : a);
@@ -1039,7 +1080,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     for (const it of S.items){
       if (it.gone) continue;
       it.m.rotation.y += dt * 1.2; it.m.position.y = it.y + Math.sin(t * 2 + it.m.userData.ph) * 0.06;
-      if (f.alive && Math.hypot(it.x - P.x, it.z - P.z) < 1.5 && Math.abs(it.y - 0.55 - P.y) < 1.2 && R.takeItem(f, it)) itemTaken(it, f);
+      if (f.alive && !S.net && Math.hypot(it.x - P.x, it.z - P.z) < 1.5 && Math.abs(it.y - 0.55 - P.y) < 1.2 && R.takeItem(f, it)) itemTaken(it, f);
     }
     if (S.hintT > 0){ S.hintT -= dt; if (S.hintT <= 0) el('#shHint').hidden = true; }
   }
@@ -1067,18 +1108,18 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
   function tickBR(dt){
     const B = S.br, Z = B.zone;
     if (B.freeze > 0){ B.freeze -= dt; if (B.freeze <= 0){ P.frozen = false; banner(); } }
-    else R.zoneTick(Z, dt);
+    else if (!S.net) R.zoneTick(Z, dt);
     // bots start cautious and turn more aggressive as the zone squeezes everyone together
     S.W.sightMul = [0.45, 0.6, 0.75, 0.9, 1, 1][Z.phase]; S.W.hunt = [0.05, 0.12, 0.25, 0.45, 0.7, 0.9][Z.phase];
     // pacing: in a map this small bots would finish each other in a minute, so they only thin out as fast as the zone closes
     const alive = S.W.fighters.filter(f => f.alive).length, keep = [9, 8, 7, 6, 5, 1][Z.phase]; S.W.truce = alive <= keep;
-    if (B.endIn > 0){ B.endIn -= dt; if (B.endIn <= 0){ finishBR(); return; } }
+    if (B.endIn > 0 && !S.net){ B.endIn -= dt; if (B.endIn <= 0){ finishBR(); return; } }
     B.wall.position.set(Z.cx, 28, Z.cz); B.wall.scale.set(Z.r, 1, Z.r);
     const outside = S.me.alive && !R.inZone(Z, P.x, P.z);
     el('#shZoneWarn').hidden = !outside; el('#shBurn').style.opacity = outside ? 0.8 : 0;
     // outside the zone your health drains steadily until you get back in, and it drains faster every phase
     if (B.freeze <= 0){
-      for (const f of S.W.fighters){ if (!f.alive || R.inZone(Z, f.x, f.z)) continue; if (R.burn(f, Z.dps * dt)) downed(f, null); }
+      for (const f of S.W.fighters){ if (S.net) break; if (!f.alive || R.inZone(Z, f.x, f.z)) continue; if (R.burn(f, Z.dps * dt)) downed(f, null); }
       B.tick -= dt; if (outside && B.tick <= 0){ B.tick = 0.9; blast(0.14, 0.08, 500, 1); S.hurtFrom = null; }
     }
   }
@@ -1329,8 +1370,9 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     } else spawnTargets(spots);
     S.ffaT = FFA_TIME; S.ffaEnd = 0;
     buildLadders();
-    if (S.br){ placeLoot(); startBR(); }
-    MUSIC.stop(); started = true; S.active = true; el('#start').hidden = true; el('#shHud').hidden = false; setPaused(false); el('#shAgain').textContent = S.net ? 'Back to room' : 'Play again';
+    if (S.br){ if (S.net) netBR(opts.net.m); else { placeLoot(); startBR(); } }
+    if (S.net && !S.team){ P.frozen = true; banner('Get ready', 'Waiting for everyone'); }
+    MUSIC.stop(); started = true; S.active = true; el('#start').hidden = true; el('#shHud').hidden = false; setPaused(false); el('#shAgain').textContent = S.net && !S.net.public ? 'Back to room' : 'Play again';
     document.body.classList.add('sh-on'); document.body.classList.toggle('sh-touch', TOUCH);
     el('#shHp').hidden = !S.fight; el('#shDead').hidden = true; el('#shFeed').innerHTML = ''; el('#shHurt').style.opacity = 0;
     if (!TOUCH) canvas.requestPointerLock?.()?.catch?.(() => {});
@@ -1356,7 +1398,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     if (S.ended) return;
     f = S.me;
     if (S.br) tickItems(dt);
-    const canShoot = S.sprintT < 0.35 && !S.climb && !(S.net && S.round.done) && !(S.fight && (S.team ? S.round.freeze > 0 : S.br ? S.br.freeze > 0 : false));
+    const canShoot = S.sprintT < 0.35 && !S.climb && !(S.net && S.round && S.round.done) && !(S.fight && (S.team ? S.round.freeze > 0 : S.br ? S.br.freeze > 0 : false));
     if (S.autoFire && !w.auto && R.canFire(f, S.now)) S.pressed = true;
     if (canShoot && (S.pressed || ((S.trigger || S.autoFire) && w.auto))){
       const fired = shoot();
@@ -1404,7 +1446,7 @@ ${TOUCH ? '<div id="shTouch"><button id="shFire" aria-label="Fire"><svg viewBox=
     const k = 1 - Math.exp(-dt * (P.onGround ? 11 : 2.5)); S.vx += (mx - S.vx) * k; S.vz += (mz - S.vz) * k;
     return S.climb ? [0, 0] : [S.vx, S.vz];
   }
-  return { start, stop, tick, render, S, setView, savedView, ARMS, GM, HOLD, vmScene, vmCam, rig, drawGunFor:drawGun, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, animBodyFor:animBody, fallFor:fall, tickFallFor:tickFall, momentum, noJump, setStance, mapDots, play, showTips, HELP, setHelp, loadGunModels, MODEL, regearFor:regear, preload, prep, ROSTER, TEAMS, showPicker, netPrep, netMsg, netLost, netNote, myPick };
+  return { start, stop, tick, render, S, setView, savedView, ARMS, GM, HOLD, vmScene, vmCam, rig, drawGunFor:drawGun, setTrigger, swap, reload, BUF, aimPoseFor:aimPose, animBodyFor:animBody, fallFor:fall, tickFallFor:tickFall, momentum, noJump, setStance, mapDots, play, showTips, HELP, setHelp, loadGunModels, MODEL, regearFor:regear, preload, prep, ROSTER, TEAMS, showPicker, lootSpots:() => { buildLadders(); return { counters:counterSpots(), alleys:alleySpots(), ladders:S.ladders.map(L => ({ x:L.inX, z:L.inZ, y:L.top })) }; }, netPrep, netMsg, netLost, netNote, myPick };
 })();
 window.SHOOTER = SHOOTER;
 { const wait = () => (window.__ready ? SHOOTER.loadGunModels() : setTimeout(wait, 300)); wait(); }
